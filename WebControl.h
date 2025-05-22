@@ -1,9 +1,13 @@
-
 #ifndef WEBCONTROL_H
 #define WEBCONTROL_H
 
-// Declare both functions here so main.ino can see them
+#include <Braccio.h>
+
 void setupWebServer();
 void handleWebControl();
 
-#endif  
+// Variabile pentru control servo
+extern int baseAngle;
+extern const int step;
+
+#endif
