@@ -1,11 +1,16 @@
 import cv2
-import os
 import numpy as np
+import os
+import json
 from datetime import datetime
 import matplotlib.pyplot as plt
+from matplotlib.widgets import Slider
 
 # === CONFIG ===
-USE_PI_CAMERA = False  # 🔁 Setează True când ești pe Raspberry Pi cu camera Pi
+output_dir = "dataset_debug"
+os.makedirs(os.path.join(output_dir, "images"), exist_ok=True)
+os.makedirs(os.path.join(output_dir, "labels"), exist_ok=True)
+config_path = "threshold_config.json"
 
 # === CLASE DE FORME ===
 classes = {
@@ -13,16 +18,21 @@ classes = {
     "half-circle": 3, "cylinder": 4, "cube": 5
 }
 
-output_dir = "dataset_debug"
-os.makedirs(os.path.join(output_dir, "images"), exist_ok=True)
-os.makedirs(os.path.join(output_dir, "labels"), exist_ok=True)
+calib = {
+    "blur": 5,
+    "threshold": 60
+}
+if os.path.exists(config_path):
+    with open(config_path, "r") as f:
+        calib.update(json.load(f))
 
-# === FUNCȚIE DE DETECȚIE ===
-def detect_shapes_and_label(frame):
+# === FUNCȚIE DETECȚIE ===
+def detect_shapes_and_label(frame, threshold_val, blur_val):
     labeled_objects = []
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-    _, thresh = cv2.threshold(blurred, 60, 255, cv2.THRESH_BINARY_INV)
+    blur_val = blur_val | 1  # asigură că e impar
+    blurred = cv2.GaussianBlur(gray, (blur_val, blur_val), 0)
+    _, thresh = cv2.threshold(blurred, threshold_val, 255, cv2.THRESH_BINARY_INV)
     contours, _ = cv2.findContours(thresh.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
     for contour in contours:
@@ -58,7 +68,7 @@ def detect_shapes_and_label(frame):
 
     return frame, labeled_objects
 
-# === FUNCȚIE DE SALVARE ===
+# === SALVARE ===
 def save_frame_and_labels(frame, labels):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     img_path = os.path.join(output_dir, "images", f"{timestamp}.jpg")
@@ -69,53 +79,57 @@ def save_frame_and_labels(frame, labels):
             f.write(f"{cls_id} {cx:.6f} {cy:.6f} {w:.6f} {h:.6f}\n")
     print(f"[SALVAT] {img_path} + {label_path}")
 
-# === MAIN ===
-if USE_PI_CAMERA:
-    # ======== CAMERA PI (Pe Raspberry Pi) =========
-    from picamera2 import Picamera2
-    import time
-    picam2 = Picamera2()
-    picam2.preview_configuration.main.size = (640, 480)
-    picam2.preview_configuration.main.format = "BGR888"
-    picam2.configure("preview")
-    picam2.start()
-    time.sleep(2)
+# === STREAM ===
+cap = cv2.VideoCapture(0)
+if not cap.isOpened():
+    print("[EROARE] Webcam-ul nu merge.")
+    exit()
 
-    while True:
-        frame = picam2.capture_array()
-        processed_frame, labels = detect_shapes_and_label(frame)
-        cv2.imshow("Shape Detection - Pi Camera", processed_frame)
+# === MATPLOTLIB FIGURE + SLIDERS ===
+plt.ion()
+fig, ax = plt.subplots()
+plt.subplots_adjust(bottom=0.25)
+img_display = ax.imshow(np.zeros((480, 640, 3), dtype=np.uint8))
+plt.axis("off")
 
-        key = cv2.waitKey(1) & 0xFF
-        if key == ord("c"):
-            save_frame_and_labels(frame, labels)
-        elif key == ord("q"):
-            break
-    cv2.destroyAllWindows()
+# === SLIDERS ===
+axthresh = plt.axes([0.15, 0.1, 0.65, 0.03])
+axblur = plt.axes([0.15, 0.05, 0.65, 0.03])
+sthresh = Slider(axthresh, 'Threshold', 0, 255, valinit=calib["threshold"], valstep=1)
+sblur = Slider(axblur, 'Blur', 1, 49, valinit=calib["blur"] | 1, valstep=2)
 
-else:
-    # ======== WEBCAM LAPTOP =========
-    cap = cv2.VideoCapture(0)
-    if not cap.isOpened():
-        print("[EROARE] Webcam-ul nu este disponibil.")
-        exit()
+frame_data = {"frame": None, "labels": []}
 
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            break
-        processed_frame, labels = detect_shapes_and_label(frame)
-        # cv2.imshow("Shape Detection - Webcam", processed_frame)
-        plt.imshow(cv2.cvtColor(processed_frame, cv2.COLOR_BGR2RGB))
-        plt.title("Shape Detection - Webcam")
-        plt.axis("off")
-        plt.show()
-        
-        key = cv2.waitKey(1) & 0xFF
-        if key == ord("c"):
-            save_frame_and_labels(frame, labels)
-        elif key == ord("q"):
-            break
+def update_fig():
+    ret, frame = cap.read()
+    if not ret:
+        return
+    t = int(sthresh.val)
+    b = int(sblur.val)
+    processed, labels = detect_shapes_and_label(frame.copy(), t, b)
+    frame_data["frame"] = frame.copy()
+    frame_data["labels"] = labels
+    img_display.set_data(cv2.cvtColor(processed, cv2.COLOR_BGR2RGB))
+    fig.canvas.draw_idle()
 
-    cap.release()
-    cv2.destroyAllWindows()
+def on_key(event):
+    if event.key == 'c':
+        if frame_data["frame"] is not None:
+            save_frame_and_labels(frame_data["frame"], frame_data["labels"])
+    elif event.key == 'q':
+        print("[IESIRE] Salvez configurarea...")
+        with open(config_path, "w") as f:
+            json.dump({
+                "threshold": int(sthresh.val),
+                "blur": int(sblur.val)
+            }, f, indent=2)
+        plt.close()
+
+fig.canvas.mpl_connect('key_press_event', on_key)
+
+print("[INFO] Apasă C pentru captură și Q pentru ieșire.")
+while plt.fignum_exists(fig.number):
+    update_fig()
+    plt.pause(0.01)
+
+cap.release()
