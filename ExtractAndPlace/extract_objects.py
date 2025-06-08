@@ -22,7 +22,7 @@ CLASSES = {
 if os.path.exists(CONFIG_FILE):
     hsv = json.load(open(CONFIG_FILE))
 else:
-    hsv = {"lh": 0, "ls": 0, "lv": 130, "uh": 179, "us": 51, "uv": 241}
+    hsv = {"lh": 0, "ls": 0, "lv": 0, "uh": 179, "us": 51, "uv": 241}
 
 def classify_shape(cnt, w, h):
     approx = cv2.approxPolyDP(cnt, 0.04 * cv2.arcLength(cnt, True), True)
@@ -31,7 +31,18 @@ def classify_shape(cnt, w, h):
     if v == 3:
         return "triangle"
     elif v == 4:
-        return "cube" if 0.95 <= w / h <= 1.05 else "rectangle"
+        # folosește bounding box rotit pentru a evita probleme la pătrate înclinate
+        rect = cv2.minAreaRect(cnt)
+        box = cv2.boxPoints(rect)
+        box = np.int0(box)
+        side_lengths = [np.linalg.norm(box[i] - box[(i+1)%4]) for i in range(4)]
+        side_lengths.sort()
+        short, long_ = side_lengths[0], side_lengths[-1]
+        aspect_ratio = short / long_
+        if aspect_ratio >= 0.70:
+            return "cube"
+        else:
+            return "rectangle"
     elif v == 5:
         return "arch"
     else:
@@ -40,6 +51,7 @@ def classify_shape(cnt, w, h):
         else:
             ratio = cv2.contourArea(cnt) / (w * h)
             return "half-circle" if ratio < 0.7 else "cylinder"
+
 
 def extract_objects(image_path, idx):
     img = cv2.imread(image_path)

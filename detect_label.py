@@ -89,7 +89,7 @@ def detect(frame):
 
     # 4. Show original frame with mask
     preview = cv2.bitwise_and(frame, frame, mask=cleaned_mask)
-    # cv2.imshow("last (masked image)", preview)
+    cv2.imshow("last (masked image)", preview)
 
     # 5. Invert mask for contour detection
     mask_for_detection = cv2.bitwise_not(cleaned_mask)
@@ -110,7 +110,15 @@ def detect(frame):
         if v == 3:
             label = "triangle"
         elif v == 4:
-            label = "cube" if 0.95 <= w / h <= 1.05 else "rectangle"
+            rect = cv2.minAreaRect(cnt)
+            box = cv2.boxPoints(rect)
+            box = box.astype(int)
+            side_lengths = [np.linalg.norm(box[i] - box[(i+1)%4]) for i in range(4)]
+            side_lengths.sort()
+            short, long_ = side_lengths[0], side_lengths[-1]
+            aspect_ratio = short / long_
+            label = "cube" if aspect_ratio >= 0.70 else "rectangle"
+
         elif v == 5:
             label = "arch"
         else:
