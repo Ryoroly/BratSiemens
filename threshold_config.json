@@ -1,5 +1,4 @@
 {
-  "blur": 37
-  "thresh_min": 50,
-  "thresh_max": 150
+  "threshold": 156,
+  "blur": 3
 }
