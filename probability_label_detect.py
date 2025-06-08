@@ -213,6 +213,12 @@ def debug_filters(image_files):
         label = filter_labels[filter_index] + f" [{filter_index+1}/{len(filter_labels)}]"
         cv2.putText(vis, label, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255,0), 2)
 
+        # Preview settings in separate window
+        settings_view = frame.copy()
+        preview_detections = find_shapes(frame, mask)
+        preview_frame = draw_results(settings_view, vote_on_detections([preview_detections]))
+        cv2.imshow("Detection Preview", preview_frame)
+
         cv2.imshow("Debug Filter Viewer", vis)
         key = cv2.waitKey(30) & 0xFF
 
@@ -233,14 +239,22 @@ def debug_filters(image_files):
             os.makedirs(settings_dir, exist_ok=True)
             existing = [f for f in os.listdir(settings_dir) if f.startswith("filter_settings_") and f.endswith(".json")]
             next_index = len(existing) + 1
-            with open(os.path.join(settings_dir, f"filter_settings_{next_index}.json"), "w") as f:
-                json.dump({
-                    "HSV-Adjustable": hsv_config,
-                    "SatBright": satbright_config,
-                    "BlurThresh": blur_config,
-                    "SharpenEdge": sharpen_config
-                }, f, indent=2)
-            print(f"Saved current filter settings to filter_settings_{next_index}.json")
+            for i, label in enumerate(filter_labels):
+                filter_data = {}
+                if label == "HSV-Adjustable":
+                    filter_data = hsv_config.copy()
+                elif label == "SatBright":
+                    filter_data = satbright_config.copy()
+                elif label == "BlurThresh":
+                    filter_data = blur_config.copy()
+                elif label == "SharpenEdge":
+                    filter_data = sharpen_config.copy()
+                if filter_data:
+                    with open(os.path.join(settings_dir, f"{label}_settings_{next_index}.json"), "w") as f:
+                        json.dump(filter_data, f, indent=2)
+                        cv2.putText(vis, f"Saved: settings_{next_index}.json", (10, vis.shape[0] - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+            cv2.imshow("Debug Filter Viewer", vis)
+            cv2.waitKey(500)
             image_index = (image_index + 1) % len(image_files)
 
     cv2.destroyAllWindows()
