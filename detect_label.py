@@ -1,32 +1,14 @@
-# {
-#   "lh": 0,
-#   "ls": 0,
-#   "lv": 104,
-#   "uh": 125,
-#   "us": 83,
-#   "uv": 255
-# }
-
-# {
-#   "lh": 0,
-#   "ls": 0,
-#   "lv": 48,
-#   "uh": 179,
-#   "us": 51,
-#   "uv": 241
-# }
-
-
 import cv2
 import numpy as np
 import os
 import json
+from collections import defaultdict, Counter
 from datetime import datetime
+import functools
 
 # --- Configuration ---
 IMAGE_FOLDER = "my_photos"
 OUTPUT_DIR = "dataset_debug"
-CONFIG_FILE = "threshold_config.json"
 IMAGE_SIZE = (640, 640)
 CLASSES = {
     "triangle": 0,
@@ -37,50 +19,70 @@ CLASSES = {
     "cube": 5
 }
 
-# --- Setup ---
+TOLERANCE = 0.03
 os.makedirs(f"{OUTPUT_DIR}/images", exist_ok=True)
 os.makedirs(f"{OUTPUT_DIR}/labels", exist_ok=True)
 
-# Load HSV calibration
-hsv = json.load(open(CONFIG_FILE)) if os.path.exists(CONFIG_FILE) else {
-    "lh": 0, "ls": 0, "lv": 0, "uh": 179, "us": 255, "uv": 255
+# HSV Configs
+HSV_CONFIGS = [
+    {"lh": 0, "ls": 80, "lv": 100, "uh": 179, "us": 255, "uv": 255},
+    {"lh": 0, "ls": 0, "lv": 104, "uh": 125, "us": 83, "uv": 255},
+    {"lh": 0, "ls": 0, "lv": 130, "uh": 179, "us": 51, "uv": 241}
+]
+
+COLOR_RANGES = {
+    "red": [(0, 100, 100), (10, 255, 255)],
+    "green": [(40, 100, 100), (85, 255, 255)],
+    "blue": [(100, 100, 100), (140, 255, 255)],
+    "yellow": [(20, 100, 100), (35, 255, 255)]
 }
 
-def nothing(x): pass
+def detect_hsv(frame, config):
+    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+    lower = np.array([config["lh"], config["ls"], config["lv"]])
+    upper = np.array([config["uh"], config["us"], config["uv"]])
+    mask = cv2.inRange(hsv, lower, upper)
+    return mask
 
-cv2.namedWindow("Calibrate")
-for k, max_val in [("lh", 179), ("ls", 255), ("lv", 255), ("uh", 179), ("us", 255), ("uv", 255)]:
-    cv2.createTrackbar(k, "Calibrate", hsv[k], max_val, nothing)
+def detect_color_mask(frame):
+    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+    masks = [cv2.inRange(hsv, np.array(low), np.array(high)) for low, high in COLOR_RANGES.values()]
+    return functools.reduce(cv2.bitwise_or, masks)
 
-def detect(frame):
-    for k in hsv:
-        hsv[k] = cv2.getTrackbarPos(k, "Calibrate")
+def detect_saturation_brightness(frame):
+    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+    return cv2.inRange(hsv, (0, 80, 100), (179, 255, 255))
 
-    hsv_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-    mask = cv2.inRange(
-        hsv_frame,
-        np.array([hsv["lh"], hsv["ls"], hsv["lv"]]),
-        np.array([hsv["uh"], hsv["us"], hsv["uv"]])
-    )
-    mask = cv2.bitwise_not(mask)
-    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((5, 5), np.uint8))
+def detect_blur_threshold(frame):
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+    return cv2.adaptiveThreshold(blurred, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 11, 2)
 
+def detect_sharpen_edge(frame):
+    kernel = np.array([[0, -1, 0], [-1, 5,-1], [0, -1, 0]])
+    sharp = cv2.filter2D(frame, -1, kernel)
+    gray = cv2.cvtColor(sharp, cv2.COLOR_BGR2GRAY)
+    _, mask = cv2.threshold(gray, 50, 255, cv2.THRESH_BINARY)
+    return mask
+
+def find_shapes(frame, mask):
     labels = []
-    raw = frame.copy()
-    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
+    kernel = np.ones((5,5), np.uint8)
+    cleaned = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
+    cleaned = cv2.morphologyEx(cleaned, cv2.MORPH_CLOSE, kernel)
+    contours, _ = cv2.findContours(cleaned, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    H, W = frame.shape[:2]
     for cnt in contours:
         if cv2.contourArea(cnt) < 300:
             continue
         x, y, w, h = cv2.boundingRect(cnt)
         approx = cv2.approxPolyDP(cnt, 0.04 * cv2.arcLength(cnt, True), True)
-        vertices = len(approx)
-
-        if vertices == 3:
+        v = len(approx)
+        if v == 3:
             label = "triangle"
-        elif vertices == 4:
+        elif v == 4:
             label = "cube" if 0.95 <= w / h <= 1.05 else "rectangle"
-        elif vertices == 5:
+        elif v == 5:
             label = "arch"
         else:
             if not cv2.isContourConvex(approx):
@@ -88,79 +90,119 @@ def detect(frame):
             else:
                 ratio = cv2.contourArea(cnt) / (w * h)
                 label = "half-circle" if ratio < 0.7 else "cylinder"
+        labels.append((label, (x + w / 2)/W, (y + h / 2)/H, w/W, h/H))
+    return labels
 
-        cv2.rectangle(raw, (x, y), (x + w, y + h), (0, 255, 0), 2)
-        cv2.putText(raw, label, (x, y - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+def vote_on_detections(detections, tolerance=TOLERANCE):
+    matched = []
+    for det_list in detections:
+        for obj in det_list:
+            label, cx, cy, w, h = obj
+            found = False
+            for item in matched:
+                dx, dy = item['center']
+                if np.sqrt((cx - dx)**2 + (cy - dy)**2) < tolerance:
+                    item['votes'].append(label)
+                    found = True
+                    break
+            if not found:
+                matched.append({'center': (cx, cy), 'size': (w, h), 'votes': [label]})
+    results = []
+    for obj in matched:
+        count = Counter(obj['votes'])
+        label, pct = count.most_common(1)[0]
+        pct_val = int(100 * pct / sum(count.values()))
+        cx, cy = obj['center']
+        w, h = obj['size']
+        results.append((label, pct_val, cx, cy, w, h))
+    return results
 
-        H, W = frame.shape[:2]
-        labels.append((CLASSES[label], (x + w / 2) / W, (y + h / 2) / H, w / W, h / H))
+def draw_results(frame, results):
+    H, W = frame.shape[:2]
+    for label, pct, cx, cy, w, h in results:
+        x1, y1 = int((cx - w/2) * W), int((cy - h/2) * H)
+        x2, y2 = int((cx + w/2) * W), int((cy + h/2) * H)
+        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+        cv2.putText(frame, f"{label} ({pct}%)", (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+    return frame
 
-    return raw, labels, mask
+def save_results(image, detections, name):
+    cv2.imwrite(f"{OUTPUT_DIR}/images/{name}.jpg", image)
+    with open(f"{OUTPUT_DIR}/labels/{name}.txt", "w") as f:
+        for label, pct, cx, cy, w, h in detections:
+            f.write(f"{CLASSES[label]} {cx:.6f} {cy:.6f} {w:.6f} {h:.6f}\n")
 
-def save(frame, labels):
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    image_path = f"{OUTPUT_DIR}/images/{ts}.jpg"
-    label_path = f"{OUTPUT_DIR}/labels/{ts}.txt"
+# --- DEBUGGING WINDOW ---
+def debug_filters(image_files):
+    image_index = 0
+    filter_index = 0
 
-    cv2.imwrite(image_path, frame)
-    with open(label_path, "w") as f:
-        for cid, cx, cy, w, h in labels:
-            f.write(f"{cid} {cx:.6f} {cy:.6f} {w:.6f} {h:.6f}\n")
+    filter_funcs = [
+        lambda f: detect_hsv(f, HSV_CONFIGS[0]),
+        lambda f: detect_hsv(f, HSV_CONFIGS[1]),
+        lambda f: detect_hsv(f, HSV_CONFIGS[2]),
+        detect_color_mask,
+        detect_saturation_brightness,
+        detect_blur_threshold,
+        detect_sharpen_edge
+    ]
+    filter_labels = ["HSV1", "HSV2", "HSV3", "ColorMask", "SatBright", "BlurThresh", "SharpenEdge"]
 
-    print(f"Saved {ts}.jpg and {ts}.txt")
+    while True:
+        frame = cv2.imread(image_files[image_index])
+        if frame is None:
+            print("Image not found")
+            break
+        frame = cv2.resize(frame, IMAGE_SIZE)
 
+        mask = filter_funcs[filter_index](frame)
+        vis = cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR)
+        label = filter_labels[filter_index] + f" [{filter_index+1}/{len(filter_funcs)}]"
+        cv2.putText(vis, label, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255,0), 2)
+
+        cv2.imshow("Debug Filter Viewer", vis)
+        key = cv2.waitKey(0) & 0xFF
+
+        if key == ord('q'):
+            break
+        elif key == 91:  # [
+            filter_index = (filter_index - 1) % len(filter_funcs)
+        elif key == 93:  # ]
+            filter_index = (filter_index + 1) % len(filter_funcs)
+        elif key == ord('a'):  # previous image
+            image_index = (image_index - 1) % len(image_files)
+        elif key == ord('d'):  # next image
+            image_index = (image_index + 1) % len(image_files)
+
+    cv2.destroyAllWindows()
+
+# --- DEBUGGING WINDOW ---
 image_files = sorted([
     os.path.join(IMAGE_FOLDER, f) for f in os.listdir(IMAGE_FOLDER)
-    if f.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp'))
+    if f.lower().endswith(('.jpg', '.jpeg', '.png', '.bmp'))
 ])
-if not image_files:
-    print("No images found in 'my_photos'.")
-    exit()
 
-index = 0
-print("Use ← and → to navigate. Press 's' to save, 'q' to quit.")
+if image_files:
+    debug_filters(image_files)
 
-while True:
-    # Load and resize image
-    image_path = image_files[index]
-    frame = cv2.imread(image_path)
+for path in image_files:
+    name = os.path.splitext(os.path.basename(path))[0]
+    frame = cv2.imread(path)
     if frame is None:
-        print(f"Could not load image: {image_path}")
-        index = (index + 1) % len(image_files)
         continue
-
     frame = cv2.resize(frame, IMAGE_SIZE)
+    detections = []
+    for config in HSV_CONFIGS:
+        mask = detect_hsv(frame, config)
+        detections.append(find_shapes(frame, mask))
+    detections.append(find_shapes(frame, detect_color_mask(frame)))
+    detections.append(find_shapes(frame, detect_saturation_brightness(frame)))
+    detections.append(find_shapes(frame, detect_blur_threshold(frame)))
+    detections.append(find_shapes(frame, detect_sharpen_edge(frame)))
 
-    # Read HSV sliders before detect
-    for k in hsv:
-        hsv[k] = cv2.getTrackbarPos(k, "Calibrate")
-
-    detected_frame, labels, mask = detect(frame)
-
-    # Combine original and detection for display
-    combined = np.hstack((frame, detected_frame))
-    cv2.imshow("Input | Detection", combined)
-
-    # Show mask so user can see slider effect
-    mask_color = cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR)
-    cv2.imshow("Calibrate", mask_color)
-
-    # waitKey with timeout so window refreshes and tracks keys
-    key = cv2.waitKey(30) & 0xFF
-
-    if key != 255:  # If any key is pressed
-        print(key)
-
-        if key == 91:  # '[' to go left
-            index = (index - 1) % len(image_files)
-        elif key == 93:  # ']' to go right
-            index = (index + 1) % len(image_files)
-        elif key == ord('s'):  # save
-            save(detected_frame, labels)
-        elif key == ord('q'):  # quit and save config
-            with open(CONFIG_FILE, "w") as f:
-                json.dump(hsv, f, indent=2)
-            break
-
+    final = vote_on_detections(detections)
+    output = draw_results(frame.copy(), final)
+    save_results(output, final, name)
+    print(f"Processed: {name}")
 
 cv2.destroyAllWindows()
