@@ -133,28 +133,102 @@ def save_results(image, detections, name):
             f.write(f"{CLASSES[label]} {cx:.6f} {cy:.6f} {w:.6f} {h:.6f}\n")
 
 # --- DEBUGGING WINDOW ---
-def debug_filters(image_path):
-    frame = cv2.imread(image_path)
-    if frame is None:
-        print("Image not found")
-        return
-    frame = cv2.resize(frame, IMAGE_SIZE)
+def debug_filters(image_files):
+    image_index = 0
+    filter_index = 0
+
+    # Separate config for each filter type
+    hsv_config = HSV_CONFIGS[0].copy()
+    satbright_config = {'s_min': 80, 'v_min': 100}
+    blur_config = {'block_size': 11, 'C': 2}
+    sharpen_config = {'thresh': 50}
+
+    def nothing(x): pass
+    cv2.namedWindow("Debug Filter Viewer")
+
+    # Trackbars per filter
+    def setup_sliders(filter_index):
+        cv2.destroyWindow("Debug Filter Viewer")
+        cv2.namedWindow("Debug Filter Viewer")
+        if filter_index == 0:
+            for k in ["lh", "ls", "lv", "uh", "us", "uv"]:
+                max_val = 255 if 's' in k or 'v' in k else 179
+                cv2.createTrackbar(k, "Debug Filter Viewer", hsv_config[k], max_val, nothing)
+        elif filter_index == 4:
+            cv2.createTrackbar("s_min", "Debug Filter Viewer", satbright_config['s_min'], 255, nothing)
+            cv2.createTrackbar("v_min", "Debug Filter Viewer", satbright_config['v_min'], 255, nothing)
+        elif filter_index == 5:
+            cv2.createTrackbar("block_size", "Debug Filter Viewer", blur_config['block_size'], 50, nothing)
+            cv2.createTrackbar("C", "Debug Filter Viewer", blur_config['C'], 20, nothing)
+        elif filter_index == 6:
+            cv2.createTrackbar("thresh", "Debug Filter Viewer", sharpen_config['thresh'], 255, nothing)
+
+    setup_sliders(filter_index)
+
+    def apply_filter(frame):
+        if filter_index == 0:
+            for k in hsv_config:
+                hsv_config[k] = cv2.getTrackbarPos(k, "Debug Filter Viewer")
+            return detect_hsv(frame, hsv_config)
+        elif filter_index == 1:
+            return detect_hsv(frame, HSV_CONFIGS[1])
+        elif filter_index == 2:
+            return detect_hsv(frame, HSV_CONFIGS[2])
+        elif filter_index == 3:
+            return detect_color_mask(frame)
+        elif filter_index == 4:
+            satbright_config['s_min'] = cv2.getTrackbarPos("s_min", "Debug Filter Viewer")
+            satbright_config['v_min'] = cv2.getTrackbarPos("v_min", "Debug Filter Viewer")
+            hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+            return cv2.inRange(hsv, (0, satbright_config['s_min'], satbright_config['v_min']), (179, 255, 255))
+        elif filter_index == 5:
+            block_size = cv2.getTrackbarPos("block_size", "Debug Filter Viewer")
+            blur_config['C'] = cv2.getTrackbarPos("C", "Debug Filter Viewer")
+            if block_size % 2 == 0:
+                block_size += 1
+            blur_config['block_size'] = block_size
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+            return cv2.adaptiveThreshold(blurred, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, block_size, blur_config['C'])
+        elif filter_index == 6:
+            thresh = cv2.getTrackbarPos("thresh", "Debug Filter Viewer")
+            sharpen_config['thresh'] = thresh
+            kernel = np.array([[0, -1, 0], [-1, 5,-1], [0, -1, 0]])
+            sharp = cv2.filter2D(frame, -1, kernel)
+            gray = cv2.cvtColor(sharp, cv2.COLOR_BGR2GRAY)
+            _, mask = cv2.threshold(gray, thresh, 255, cv2.THRESH_BINARY)
+            return mask
+
+    filter_labels = ["HSV-Adjustable", "HSV2", "HSV3", "ColorMask", "SatBright", "BlurThresh", "SharpenEdge"]
 
     while True:
-        masks = []
-        for config in HSV_CONFIGS:
-            mask = detect_hsv(frame, config)
-            masks.append(mask)
-        masks.append(detect_color_mask(frame))
-        masks.append(detect_saturation_brightness(frame))
-        masks.append(detect_blur_threshold(frame))
-        masks.append(detect_sharpen_edge(frame))
-
-        stacked = np.hstack([cv2.cvtColor(m, cv2.COLOR_GRAY2BGR) for m in masks])
-        cv2.imshow("Debug Filters", cv2.resize(stacked, (1280, 240)))
-
-        if cv2.waitKey(30) & 0xFF == ord('q'):
+        frame = cv2.imread(image_files[image_index])
+        if frame is None:
+            print("Image not found")
             break
+        frame = cv2.resize(frame, IMAGE_SIZE)
+
+        mask = apply_filter(frame)
+        vis = cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR)
+        label = filter_labels[filter_index] + f" [{filter_index+1}/{len(filter_labels)}]"
+        cv2.putText(vis, label, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255,0), 2)
+
+        cv2.imshow("Debug Filter Viewer", vis)
+        key = cv2.waitKey(30) & 0xFF
+
+        if key == ord('q'):
+            break
+        elif key == 91:  # [
+            filter_index = (filter_index - 1) % len(filter_labels)
+            setup_sliders(filter_index)
+        elif key == 93:  # ]
+            filter_index = (filter_index + 1) % len(filter_labels)
+            setup_sliders(filter_index)
+        elif key == ord('a'):
+            image_index = (image_index - 1) % len(image_files)
+        elif key == ord('d'):
+            image_index = (image_index + 1) % len(image_files)
+
     cv2.destroyAllWindows()
 
 # --- DEBUGGING WINDOW ---
@@ -164,7 +238,7 @@ image_files = sorted([
 ])
 
 if image_files:
-    debug_filters(image_files[0])
+    debug_filters(image_files)
 
 for path in image_files:
     name = os.path.splitext(os.path.basename(path))[0]
