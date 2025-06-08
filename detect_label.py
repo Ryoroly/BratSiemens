@@ -7,6 +7,15 @@
 #   "uv": 255
 # }
 
+# {
+#   "lh": 0,
+#   "ls": 0,
+#   "lv": 48,
+#   "uh": 179,
+#   "us": 51,
+#   "uv": 241
+# }
+
 
 import cv2
 import numpy as np
@@ -112,6 +121,7 @@ index = 0
 print("Use ← and → to navigate. Press 's' to save, 'q' to quit.")
 
 while True:
+    # Load and resize image
     image_path = image_files[index]
     frame = cv2.imread(image_path)
     if frame is None:
@@ -120,32 +130,37 @@ while True:
         continue
 
     frame = cv2.resize(frame, IMAGE_SIZE)
+
+    # Read HSV sliders before detect
+    for k in hsv:
+        hsv[k] = cv2.getTrackbarPos(k, "Calibrate")
+
     detected_frame, labels, mask = detect(frame)
 
-    if frame.shape != detected_frame.shape:
-        detected_frame = cv2.resize(detected_frame, (frame.shape[1], frame.shape[0]))
-
+    # Combine original and detection for display
     combined = np.hstack((frame, detected_frame))
     cv2.imshow("Input | Detection", combined)
 
-    # Show mask in calibration window so you can see effect of sliders
+    # Show mask so user can see slider effect
     mask_color = cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR)
     cv2.imshow("Calibrate", mask_color)
 
+    # waitKey with timeout so window refreshes and tracks keys
     key = cv2.waitKey(30) & 0xFF
-    # Print key for debugging arrow keys
-    if key != 255:
-        print(f"Pressed key code: {key}")
 
-    if key == ord("s"):
-        save(detected_frame, labels)
-    elif key == ord("q"):
-        with open(CONFIG_FILE, "w") as f:
-            json.dump(hsv, f, indent=2)
-        break
-    elif key == 81 or key == 2424832:  # Left arrow key
-        index = (index - 1) % len(image_files)
-    elif key == 83 or key == 2555904:  # Right arrow key
-        index = (index + 1) % len(image_files)
+    if key != 255:  # If any key is pressed
+        print(key)
+
+        if key == 91:  # '[' to go left
+            index = (index - 1) % len(image_files)
+        elif key == 93:  # ']' to go right
+            index = (index + 1) % len(image_files)
+        elif key == ord('s'):  # save
+            save(detected_frame, labels)
+        elif key == ord('q'):  # quit and save config
+            with open(CONFIG_FILE, "w") as f:
+                json.dump(hsv, f, indent=2)
+            break
+
 
 cv2.destroyAllWindows()
