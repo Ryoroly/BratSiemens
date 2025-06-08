@@ -228,6 +228,20 @@ def debug_filters(image_files):
             image_index = (image_index - 1) % len(image_files)
         elif key == ord('d'):
             image_index = (image_index + 1) % len(image_files)
+        elif key == ord('s'):
+            settings_dir = os.path.join(OUTPUT_DIR, "settings")
+            os.makedirs(settings_dir, exist_ok=True)
+            existing = [f for f in os.listdir(settings_dir) if f.startswith("filter_settings_") and f.endswith(".json")]
+            next_index = len(existing) + 1
+            with open(os.path.join(settings_dir, f"filter_settings_{next_index}.json"), "w") as f:
+                json.dump({
+                    "HSV-Adjustable": hsv_config,
+                    "SatBright": satbright_config,
+                    "BlurThresh": blur_config,
+                    "SharpenEdge": sharpen_config
+                }, f, indent=2)
+            print(f"Saved current filter settings to filter_settings_{next_index}.json")
+            image_index = (image_index + 1) % len(image_files)
 
     cv2.destroyAllWindows()
 
