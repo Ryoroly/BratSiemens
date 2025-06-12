@@ -6,7 +6,7 @@ import pandas as pd
 from tqdm import tqdm
 
 # CONFIG
-API_KEY = "AIzaSyBvs5d3T85nkd4qAcnLnC38owQ4hUVstPg"  
+API_KEY = os.environ['GEMINI_API_KEY']
 SOURCE_IMAGES = "input_images"
 DATASET_DIR = "dataset"
 SPLIT_RATIOS = {"train": 0.7, "val": 0.2, "test": 0.1}

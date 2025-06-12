@@ -4,7 +4,7 @@ import os, json, re
 import google.generativeai as genai
 from PIL import Image
 
-API_KEY = "YOUR_API_KEY"
+API_KEY = os.environ['GEMINI_API_KEY']
 genai.configure(api_key=API_KEY)
 model = genai.GenerativeModel(model_name="gemini-2.0-flash")
 
