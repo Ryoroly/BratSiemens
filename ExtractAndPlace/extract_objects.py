@@ -4,8 +4,7 @@ import os
 import json
 
 # --- Configurare ---
-# IMAGE_FOLDER = "my_photos"
-IMAGE_FOLDER = "solo_obj"
+IMAGE_FOLDER = "ExtractAndPlace/rawObj/objPiCamera"
 CONFIG_FILE = "threshold_config.json"
 OUTPUT_FOLDER = "objects"
 os.makedirs(OUTPUT_FOLDER, exist_ok=True)
@@ -56,7 +55,7 @@ def classify_shape(cnt, w, h):
 
 def extract_objects(image_path, idx):
     img = cv2.imread(image_path)
-    img = cv2.resize(img, (640, 640))
+    #img = cv2.resize(img, (640, 640))
     hsv_img = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
 
     lower = np.array([hsv["lh"], max(hsv["ls"], 80), max(hsv["lv"], 100)])
