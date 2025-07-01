@@ -1,0 +1,24 @@
+/my_photos
+/dataset_debug/images
+/dataset_debug/labels
+/dataset_debug
+/p-my_photos
+/ExtractAndPlace/my_photos
+/ExtractAndPlace/objects
+/ExtractAndPlace/dataset
+/ExtractAndPlace/__pycache__
+/Making Box/images
+/Making Box/labels
+Making Box/history.json
+Making Box/image1.jpeg
+/Making Box/dataset
+/Making Box/input_images
+/Making Box/experimental/mosaic
+/Making Box/experimental/experiment2_underApiLimitAuto/raw_data
+Making Box/experimental/experiment2_underApiLimitAuto/history.json
+/dataset
+Making Box/experimental/experiment2_underApiLimitAuto/history.json
+Making Box/experimental/experiment2_underApiLimitAuto/history.json
+ExtractAndPlace/polished_objects/
+ExtractAndPlace/rawObj/objPiCamera/
+ExtractAndPlace/rawObj/solo_obj/
