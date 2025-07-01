@@ -4,7 +4,7 @@ import os
 import json
 
 # --- Configurare ---
-IMAGE_FOLDER = "my_photos"
+# IMAGE_FOLDER = "my_photos"
 IMAGE_FOLDER = "solo_obj"
 CONFIG_FILE = "threshold_config.json"
 OUTPUT_FOLDER = "objects"

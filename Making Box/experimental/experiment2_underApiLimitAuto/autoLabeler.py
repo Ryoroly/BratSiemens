@@ -1,6 +1,7 @@
 import os, json, time, re
 from PIL import Image, ImageDraw
 import google.generativeai as genai
+from google.api_core import exceptions as google_exceptions
 
 # CONFIGURATION
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
@@ -11,7 +12,7 @@ PREPROCESS_DIR = "preprocessed"
 LABELED_DIR = "labeled"
 DEBUG_DIR = "debug_visuals"
 HISTORY_FILE = "history.json"
-RATE_LIMIT_SLEEP = 5  # safe for 15req/min
+MIN_SLEEP = 0  # small safe constant sleep after every request
 
 CLASSES = ["rectangle", "arch", "cube", "cylinder", "triangle", "half circle"]
 CLASS_MAP = {label: i for i, label in enumerate(CLASSES)}
@@ -98,7 +99,20 @@ NO markdown, ONLY valid JSON list.
         with open(HISTORY_FILE, "w") as f:
             json.dump(list(history), f, indent=2)
 
+    except google_exceptions.ResourceExhausted as e:
+        # Catch Gemini 429 Quota errors gracefully
+        print(f"⚠ Rate limit hit on {patch_file}")
+        # Check if retry_delay is provided
+        retry_delay = getattr(e, 'retry_delay', None)
+        if retry_delay:
+            delay = retry_delay.total_seconds()
+        else:
+            delay = 10  # default to 10s
+        print(f"Sleeping for {delay:.2f} seconds to respect rate limit...")
+        time.sleep(delay)
+        continue  # retry next file after sleep
+
     except Exception as e:
         print(f"⚠ Error on {patch_file}: {str(e)}")
 
-    time.sleep(RATE_LIMIT_SLEEP)
+    time.sleep(MIN_SLEEP)
