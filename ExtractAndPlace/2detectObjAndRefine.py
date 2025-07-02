@@ -2,8 +2,8 @@ import cv2
 import numpy as np
 import os
 
-INPUT_FOLDER = "ExtractAndPlace/objects"  # Replace with your folder containing PNGs
-OUTPUT_FOLDER = "ExtractAndPlace/polished_objects"
+INPUT_FOLDER = "objects2"  # Replace with your folder containing PNGs
+OUTPUT_FOLDER = "polished_objects2"
 os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 
 def repair_arch(path, idx):

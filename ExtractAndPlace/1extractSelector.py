@@ -4,7 +4,7 @@ import os
 import json
 
 # --- CONFIG ---
-OUTPUT_FOLDER = "objects"
+OUTPUT_FOLDER = "objects3"
 os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 CONFIG_FILE = "threshold_config.json"
 
@@ -153,7 +153,7 @@ def get_images_from_folder(folder):
     ]
 
 # --- SET YOUR FOLDER HERE ---
-INPUT_FOLDER = "ExtractAndPlace/rawObj/objPiCamera"  # Replace with your folder
+INPUT_FOLDER = "New Folder"  # Replace with your folder
 image_paths = get_images_from_folder(INPUT_FOLDER)
 
 if not image_paths:
