@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Braccio Robot - Real-time Joint Angles</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f5f5f5;
+            margin: 0;
+            padding: 20px;
+            color: #333;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+            padding: 30px;
+        }
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 30px;
+        }
+        .angle-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+        }
+        .joint-card {
+            background: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%);
+            border-radius: 8px;
+            padding: 20px;
+            color: white;
+            text-align: center;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease;
+        }
+        .joint-card:hover {
+            transform: translateY(-5px);
+        }
+        .joint-name {
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin-bottom: 10px;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.2);
+        }
+        .angle-value {
+            font-size: 2.5rem;
+            font-weight: 700;
+            font-family: 'Courier New', monospace;
+        }
+        .angle-unit {
+            font-size: 1rem;
+            opacity: 0.8;
+        }
+        .status {
+            text-align: center;
+            margin: 25px 0;
+            padding: 15px;
+            border-radius: 8px;
+            background-color: #f8f9fa;
+            font-weight: 500;
+        }
+        .connected { color: #28a745; }
+        .disconnected { color: #dc3545; }
+        .connection-info {
+            text-align: center;
+            margin-top: 20px;
+            font-size: 0.9rem;
+            color: #6c757d;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>BRACCIO ROBOT JOINT ANGLES</h1>
+        
+        <div class="status">
+            Connection status: <span id="statusText">DISCONNECTED</span>
+        </div>
+        
+        <div class="angle-grid">
+            <div class="joint-card">
+                <div class="joint-name">M1 - Base</div>
+                <div class="angle-value" id="m1">0</div>
+                <div class="angle-unit">degrees</div>
+            </div>
+            <div class="joint-card">
+                <div class="joint-name">M2 - Shoulder</div>
+                <div class="angle-value" id="m2">0</div>
+                <div class="angle-unit">degrees</div>
+            </div>
+            <div class="joint-card">
+                <div class="joint-name">M3 - Elbow</div>
+                <div class="angle-value" id="m3">0</div>
+                <div class="angle-unit">degrees</div>
+            </div>
+            <div class="joint-card">
+                <div class="joint-name">M4 - Wrist Vertical</div>
+                <div class="angle-value" id="m4">0</div>
+                <div class="angle-unit">degrees</div>
+            </div>
+            <div class="joint-card">
+                <div class="joint-name">M5 - Wrist Rotation</div>
+                <div class="angle-value" id="m5">0</div>
+                <div class="angle-unit">degrees</div>
+            </div>
+            <div class="joint-card">
+                <div class="joint-name">M6 - Gripper</div>
+                <div class="angle-value" id="m6">0</div>
+                <div class="angle-unit">degrees</div>
+            </div>
+        </div>
+        
+        <div class="connection-info">
+            <p>Ensure the Braccio robot is powered on and connected to the same network</p>
+            <p>Robot IP: <span id="ipAddress">192.168.1.100</span> | WebSocket Port: 81</p>
+        </div>
+    </div>
+
+    <script>
+        // Configurare conexiune
+        const ipAddress = '192.168.1.100'; // Înlocuiește cu IP-ul Arduino
+        const port = 81;
+        const socket = new WebSocket(`ws://${ipAddress}:${port}`);
+        
+        // Elemente UI
+        const statusText = document.getElementById('statusText');
+        const angleElements = {
+            m1: document.getElementById('m1'),
+            m2: document.getElementById('m2'),
+            m3: document.getElementById('m3'),
+            m4: document.getElementById('m4'),
+            m5: document.getElementById('m5'),
+            m6: document.getElementById('m6')
+        };
+        
+        // Manager conexiune
+        socket.onopen = () => {
+            statusText.textContent = 'CONNECTED';
+            statusText.className = 'connected';
+            console.log('WebSocket connection established');
+        };
+        
+        socket.onclose = () => {
+            statusText.textContent = 'DISCONNECTED';
+            statusText.className = 'disconnected';
+            console.log('WebSocket connection closed');
+        };
+        
+        socket.onerror = (error) => {
+            console.error('WebSocket error:', error);
+        };
+        
+        // Procesare date primite
+        socket.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                updateAngles(data);
+            } catch (error) {
+                console.error('Error parsing JSON:', error);
+            }
+        };
+        
+        // Actualizare valori unghiuri
+        function updateAngles(angles) {
+            angleElements.m1.textContent = angles.M1;
+            angleElements.m2.textContent = angles.M2;
+            angleElements.m3.textContent = angles.M3;
+            angleElements.m4.textContent = angles.M4;
+            angleElements.m5.textContent = angles.M5;
+            angleElements.m6.textContent = angles.M6;
+        }
+        
+        // Reconectare automată la pierderea conexiunii
+        setInterval(() => {
+            if (socket.readyState === WebSocket.CLOSED) {
+                window.location.reload();
+            }
+        }, 5000);
+    </script>
+</body>
+</html>
