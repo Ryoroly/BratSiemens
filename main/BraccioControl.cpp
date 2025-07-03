@@ -1,20 +1,29 @@
 // BraccioControl.cpp
 #include "BraccioControl.h"
 #include "Constants.h"
-#include "Interpolation.h" // Necesara pentru calculateInterpolatedPosition
-#include <Arduino.h> // Pentru Serial.println
-#include <Braccio.h>
+#include "Interpolation.h" 
+#include "Braccio.h"
+#include <Arduino.h> 
+#include "BluetoothManager.h"
+//#include <Braccio.h>
 
 extern int pozitiefinalam1 = 0;
+
+int statusBLE = 0; //semnalul pe care il trimit catre rasbery py prin BLE
+//initail este 0 , dupa ce intra in loopul de a executa o functie se face 1
+
 void executeTransportSequence(float pickup_x, float pickup_y, int obiect_id) {
+
+//trimite 1 la arduino
+  statusBLE = 1;
+  sendStatusToBLE(statusBLE);
+  Serial.println(">>> STATUS BLE: 1 (ACTIV) - Încep secvența de transport");
 
 
   initializeServoPositions(pozitiefinalam1);
-
-
-
   // PASUL 1: Mergem la poziția de ridicare cu gripper deschis și M5 FIXAT LA 30
   ServoPosition pickup_pos = calculateInterpolatedPosition(pickup_x, pickup_y);
+  
   pickup_pos.m6_gripper = 6; // Gripper deschis
 
   // Aplicăm offseturile pentru apucare mai bună
@@ -23,7 +32,9 @@ void executeTransportSequence(float pickup_x, float pickup_y, int obiect_id) {
   pickup_pos.m3_elbow = constrain(pickup_pos.m3_elbow + M3_OFFSET_PICKUP, 0, 180);
 
   // IMPORTANT: Setăm M5 la poziția FIXĂ de pickup (30 grade)
-  pickup_pos.m5_wrist_rot = M5_PICKUP_POSITION;
+
+
+  //pickup_pos.m5_wrist_rot = M5_PICKUP_POSITION;
 
   Serial.println(">>> Pas 1: Merg la poziția de ridicare cu M5 FIXAT la 30 grade...");
   // Serial.print(">>> Poziție ajustată: M2="); Serial.print(pickup_pos.m2_shoulder);
@@ -124,6 +135,11 @@ void executeTransportSequence(float pickup_x, float pickup_y, int obiect_id) {
   smoothRotateM5(trecere_final, pos_trecere.m5_wrist_rot, 3); // Înapoi la poziția standard
 
   pozitiefinalam1=trecere_final.m1_base;
+
+
+  statusBLE = 0;
+  sendStatusToBLE(statusBLE);
+  Serial.println(">>> STATUS BLE: 0 (INACTIV) - Secvența de transport terminată");
 }
 
 // Funcție nouă pentru rotirea progresivă a M5
@@ -174,17 +190,18 @@ void moveToPositionThroughTransitionWithFixedM5(ServoPosition pos) {
                         trecere_pos.m2_shoulder,
                         trecere_pos.m3_elbow,
                         trecere_pos.m4_wrist_vert,
-                        trecere_pos.m5_wrist_rot,
+                        pos.m5_wrist_rot,
+                        //trecere_pos.m5_wrist_rot,
                         trecere_pos.m6_gripper);
   delay(DELAY_MODIFICABIL);
 
   // Acum rotim progresiv M5 la poziția de pickup (30)
   Serial.println(">>> Rotesc progresiv M5 pe drum către pickup la 30 grade...");
-  smoothRotateM5(trecere_pos, M5_PICKUP_POSITION, 3); // Rotim M5 la 30
+  //smoothRotateM5(trecere_pos, M5_PICKUP_POSITION, 3); // Rotim M5 la 30
 
   // În final, mergem la poziția de pickup cu M5 la 30
   Serial.println(">>> Ajung la poziția de pickup cu M5 la 30 grade...");
-  pos.m5_wrist_rot = M5_PICKUP_POSITION; // Asigurăm că M5 este la 30
+  //pos.m5_wrist_rot = M5_PICKUP_POSITION; // Asigurăm că M5 este la 30
   Braccio.ServoMovement(DELAY_BRACCIO_MOVEMENT,
                         pos.m1_base,
                         pos.m2_shoulder,

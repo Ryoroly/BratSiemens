@@ -2,47 +2,70 @@
 #include "Constants.h"
 
 // Inițializarea variabilelor globale
-//pentru partea dreapta sus ok
+//pentru partea dreapta sus 
 int m1dinstanga = 110;
-int m1dindreapta = 105; //bun
+int m1dindreapta = 105; 
 
-//pentru partea dreapta jos ok
-int m1dinstangajos = 120;//bun
-int m1dindreaptajos = 110;//bun
+//pentru partea dreapta jos 
+int m1dinstangajos = 120;
+int m1dindreaptajos = 110;
 
 
 //pentru stanga sus
-int m1dinstangasus = 72;//pentru stanga sus //bun
-int m1dindreaptasus = 68;//pentru stanga sus //bun
+int m1dinstangasus = 72;//pentru stanga sus 
+int m1dindreaptasus = 66;//pentru stanga sus 
 
 
 //pentru stanga jos
-int m1dinstangastjos = 65;//pentru stanga sus //bun
-int m1dindreaptastjos = 60;//pentru stanga sus //bun
+int m1dinstangastjos = 65;//pentru stanga sus 
+int m1dindreaptastjos = 60;//pentru stanga sus 
 
-
-//int pozitiefinalam1;
 
 ServoPosition pos_stanga_jos;
 ServoPosition pos_dreapta_jos;
 ServoPosition pos_dreapta_sus;
 ServoPosition pos_stanga_sus;
 
+ServoPosition pos_mijloc_jos;
+ServoPosition pos_mijloc_sus;
+
+
+// pos_mijloc_jos= {90, 120, 150, 165, 40, 70};
+// pos_mijloc_sus= {90, 160, 100, 165, 40, 70};
 
 void initializeServoPositions(int pozitiefinalam1) {
     if(pozitiefinalam1 < 90) { //cand pleca din stanga in dreapta 
-        pos_stanga_jos = {m1dinstangastjos, 120, 140, 160, 10, 10};
-        pos_dreapta_jos = {m1dinstangajos, 120, 140, 160, 50, 10};
-        pos_dreapta_sus = {m1dinstanga, 150, 100, 160, 20, 10};
-        pos_stanga_sus = {m1dinstangasus, 150, 100, 160, 20, 10};
+        pos_stanga_jos = {m1dinstangastjos, 130, 145, 165, 15, 10};
+        pos_dreapta_jos = {m1dinstangajos, 130, 145, 165, 60, 10};
+        pos_dreapta_sus = {m1dinstanga, 160, 100, 160, 45, 10};
+        pos_stanga_sus = {m1dinstangasus, 155, 100, 160, 20, 10};
+        pos_mijloc_jos= {90, 120, 150, 165, 40, 70};
+        pos_mijloc_sus= {90, 160, 100, 165, 40, 70};
     }
     else { //cand pleaca din dreapta in stanga
-        pos_stanga_jos = {m1dindreaptastjos, 120, 140, 160, 10, 10};
-        pos_dreapta_jos = {m1dindreaptajos, 120, 140, 160, 50, 10};
-        pos_dreapta_sus = {m1dindreapta, 150, 100, 160, 20, 10};
-        pos_stanga_sus = {m1dindreaptasus, 150, 100, 160, 20, 10};
+        pos_stanga_jos = {m1dindreaptastjos, 130, 145, 165, 15, 10};
+        pos_dreapta_jos = {m1dindreaptajos, 130, 145, 165, 60, 10};
+        pos_dreapta_sus = {m1dindreapta, 160, 100, 160, 45, 10};
+        pos_stanga_sus = {m1dindreaptasus, 155, 100, 160, 20, 10};
+        pos_mijloc_jos= {90, 120, 150, 165, 40, 70};
+        pos_mijloc_sus= {90, 160, 100, 165, 40, 70};
     }
 }
+
+// void initializeServoPositions(int pozitiefinalam1) {
+//     if(pozitiefinalam1 < 90) { //cand pleca din stanga in dreapta 
+//         pos_stanga_jos = {m1dinstangastjos, 130, 145, 165, 0, 10};
+//         pos_dreapta_jos = {m1dinstangajos, 130, 145, 165, 60, 10};
+//         pos_dreapta_sus = {m1dinstanga, 160, 100, 160, 45, 10};
+//         pos_stanga_sus = {m1dinstangasus, 155, 100, 160, 10, 10};
+//     }
+//     else { //cand pleaca din dreapta in stanga
+//         pos_stanga_jos = {m1dindreaptastjos, 130, 145, 165, 0, 10};
+//         pos_dreapta_jos = {m1dindreaptajos, 130, 145, 165, 60, 10};
+//         pos_dreapta_sus = {m1dindreapta, 160, 100, 160, 45, 10};
+//         pos_stanga_sus = {m1dindreaptasus, 155, 100, 160, 10, 10};
+//     }
+// }
 
 
 
@@ -65,6 +88,10 @@ Point2D coord_stanga_jos = {0, 0};
 Point2D coord_dreapta_jos = {xul, 0};
 Point2D coord_dreapta_sus = {xul, yul};
 Point2D coord_stanga_sus = {0, yul};
+
+Point2D coord_mijloc_jos = {xul/2, 0};
+Point2D coord_mijloc_sus = {xul, yul/2};
+
 
 bool robotBusy = false;
 String currentCommand = "";
