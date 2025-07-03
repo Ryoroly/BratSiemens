@@ -33,32 +33,56 @@ obj_dir = os.path.join(OBJECTS_ROOT, selected_run)
 # Utility: list PNGs
 list_pngs = lambda d: sorted([f for f in os.listdir(d) if f.lower().endswith('.png')])
 
-# Classification logic
 def classify_shape(obj):
-    mask = obj[:, :, 3]
-    kern = np.ones((5,5), np.uint8)
+    mask = obj[:, :, 3]  # Alpha channel
+    kern = np.ones((5, 5), np.uint8)
     m = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kern)
     m = cv2.morphologyEx(m, cv2.MORPH_CLOSE, kern)
-    cnts, _ = cv2.findContours(m, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    if not cnts:
+
+    cnts, hierarchy = cv2.findContours(m, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)
+    if not cnts or hierarchy is None:
         return "unknown"
+
+    hierarchy = hierarchy[0]  # shape: (num_contours, 4)
+    outer_cnts = [cnts[i] for i, h in enumerate(hierarchy) if h[3] == -1]
+    hole_cnts = [cnts[i] for i, h in enumerate(hierarchy) if h[3] != -1]
+
+    if len(outer_cnts) == 1 and len(hole_cnts) == 1:
+        outer = outer_cnts[0]
+        inner = hole_cnts[0]
+
+        # Check if the inner contour is fairly circular
+        area = cv2.contourArea(inner)
+        (x, y), r = cv2.minEnclosingCircle(inner)
+        circle_area = np.pi * r * r
+        circularity_error = abs(area - circle_area) / circle_area
+
+        # Also check placement of the hole: not too close to the edge
+        ox, oy, ow, oh = cv2.boundingRect(outer)
+        cx, cy, cr = x, y, r
+        if circularity_error < 0.25 and ox + 0.2*ow < cx < ox + 0.8*ow:
+            return "arch"
+
+    # Fallback to classic logic
     cnt = max(cnts, key=cv2.contourArea)
     approx = cv2.approxPolyDP(cnt, 0.04 * cv2.arcLength(cnt, True), True)
     v = len(approx)
+
     if v == 3:
         return "triangle"
     if v == 4:
-        x,y,w,h = cv2.boundingRect(approx)
-        return "square" if 0.95 <= w/float(h) <= 1.05 else "rectangle"
+        x, y, w, h = cv2.boundingRect(approx)
+        return "square" if 0.95 <= w / float(h) <= 1.05 else "rectangle"
     if v == 5:
         return "pentagon"
+
+    # Circle fallback
     area = cv2.contourArea(cnt)
-    (x,y),r = cv2.minEnclosingCircle(cnt)
-    return "circle" if abs(area - np.pi*r*r) < 0.1*np.pi*r*r else "unknown"
+    (x, y), r = cv2.minEnclosingCircle(cnt)
+    return "circle" if abs(area - np.pi * r * r) < 0.1 * np.pi * r * r else "unknown"
 
 # Shapes order
-shapes = ["triangle", "square", "rectangle", "pentagon", "circle", "unknown"]
-
+shapes = ["triangle", "square", "rectangle", "pentagon", "circle", "arch", "unknown"]
 # Load and classify images
 image_files = list_pngs(obj_dir)
 if not image_files:
