@@ -3,10 +3,10 @@
 #include "BluetoothManager.h"
 #include "BraccioControl.h"
 #include "Interpolation.h"
-
+#include "Braccio.h"
 
 #include <ArduinoBLE.h>
-#include <Braccio.h>
+//#include <Braccio.h>
 #include <Servo.h> 
 #include <Arduino.h> 
 
@@ -30,6 +30,9 @@ extern Point2D coord_stanga_jos;
 extern Point2D coord_dreapta_jos;
 extern Point2D coord_dreapta_sus;
 extern Point2D coord_stanga_sus;
+
+extern Point2D coord_mijloc_jos;
+extern Point2D coord_mijloc_sus;
 
 void setup() {
   Serial.begin(9600);

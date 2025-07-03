@@ -6,13 +6,13 @@
 
 // ===== VARIABILE DE AJUSTARE PENTRU APUCARE OPTIMIZATA =====
 // Aceste valori se adaugă la pozițiile M2 și M3 pentru o apucare mai bună
-const int M2_OFFSET_PICKUP = 10;     // Offset pentru M2 (shoulder) la pickup - valori negative coboară brațul
-const int M3_OFFSET_PICKUP = 10;     // Offset pentru M3 (elbow) la pickup - valori negative apropie cotul
+const int M2_OFFSET_PICKUP = 0;     // ERA 10 Offset pentru M2 (shoulder) la pickup - valori negative coboară brațul
+const int M3_OFFSET_PICKUP = 0;     // ERA 10 Offset pentru M3 (elbow) la pickup - valori negative apropie cotul
 const int M2_OFFSET_CORNERS = 0;    // Offset pentru M2 în pozițiile din colțurile dreptunghiului
 const int M3_OFFSET_CORNERS = 0;    // Offset pentru M3 în pozițiile din colțurile dreptunghiului
 
 
-const int Y_OFFSET = -110;          // Valoarea care se adaugă la Y pentru a coborî brațul
+const int Y_OFFSET = -100;          // Valoarea care se adaugă la Y pentru a coborî brațul
 const int X_OFFSET = 0;  
 
 const int M5_PICKUP_POSITION = 30;   // M5 la pickup - poziția fixă pentru apucare
@@ -43,6 +43,10 @@ extern ServoPosition pos_dreapta_jos;
 extern ServoPosition pos_dreapta_sus;
 extern ServoPosition pos_stanga_sus;
 
+extern ServoPosition pos_mijloc_jos;
+extern ServoPosition pos_mijloc_sus;
+
+
 // Poziție de trecere pentru toate mișcările
 extern ServoPosition pos_trecere;
 
@@ -56,6 +60,9 @@ extern Point2D coord_stanga_jos;
 extern Point2D coord_dreapta_jos;
 extern Point2D coord_dreapta_sus;
 extern Point2D coord_stanga_sus;
+
+extern Point2D coord_mijloc_jos;
+extern Point2D coord_mijloc_sus;
 
 // Variabile pentru starea robotului
 extern bool robotBusy;
