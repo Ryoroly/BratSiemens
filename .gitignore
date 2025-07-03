@@ -29,3 +29,5 @@ ExtractAndPlace/rawObj/solo_obj/
 ExtractAndPlace/Streamlit/threshold_config.json
 /ExtractAndPlace/Streamlit/rawObj
 /ExtractAndPlace/Streamlit/temp
+/ExtractAndPlace/Streamlit/pages/rawObj
+/ExtractAndPlace/Streamlit/pages/temp
