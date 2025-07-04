@@ -3,35 +3,35 @@ import cv2
 import numpy as np
 import os
 from datetime import datetime
+import shutil
 
 # --- CONFIG ---
 base_dir = os.path.dirname(os.path.abspath(__file__))
 TEMP_ROOT = os.path.join(base_dir, "temp")
-APP1_FOLDER = os.path.join(TEMP_ROOT, "app1_extract_selector")
-APP2_FOLDER = os.path.join(TEMP_ROOT, "app2_shape_classifier")
-OBJECTS_ROOT = os.path.join(APP1_FOLDER, "objects")
-
-# Sidebar Title
-st.sidebar.title("App 2: Shape Classifier & Renamer")
+APP2_SIMPLE = os.path.join(TEMP_ROOT, "app2_shape_classifier")
+OBJECTS_ROOT = os.path.join(base_dir, "temp", "app1_extract_selector", "objects")
 
 # Ensure objects directory exists
 if not os.path.isdir(OBJECTS_ROOT):
-    st.sidebar.error("No extraction runs found. Run App 1 first.")
+    st.error("No extracted objects found. Run App 1 first.")
     st.stop()
 
-# Select extraction run
-run_folders = sorted(
-    d for d in os.listdir(OBJECTS_ROOT)
-    if os.path.isdir(os.path.join(OBJECTS_ROOT, d))
-)
-selected_run = st.sidebar.selectbox("Select extraction run", run_folders)
+# Sidebar: select run
+st.sidebar.title("App 2: Detect & Save")
+runs = sorted(d for d in os.listdir(OBJECTS_ROOT) if os.path.isdir(os.path.join(OBJECTS_ROOT, d)))
+if not runs:
+    st.sidebar.error("No extraction runs available.")
+    st.stop()
+selected_run = st.sidebar.selectbox("Select extraction run", runs)
 obj_dir = os.path.join(OBJECTS_ROOT, selected_run)
 
-# List PNG files
-def list_pngs(folder):
-    return [f for f in sorted(os.listdir(folder)) if f.lower().endswith('.png')]
+# List PNGs
+images = sorted(f for f in os.listdir(obj_dir) if f.lower().endswith('.png'))
+if not images:
+    st.info("No PNG objects found in selected run.")
+    st.stop()
 
-# Classification logic
+# Shape classification
 def classify_shape(obj):
     mask = obj[:, :, 3]
     kernel = np.ones((5,5), np.uint8)
@@ -47,130 +47,34 @@ def classify_shape(obj):
         return "triangle"
     elif v == 4:
         x,y,w,h = cv2.boundingRect(approx)
-        return "square" if 0.95 <= w/float(h) <= 1.05 else "rectangle"
-    elif v == 5:
-        return "pentagon"
+        return "square" if 0.95 <= w/h <= 1.05 else "rectangle"
     else:
         area = cv2.contourArea(cnt)
-        (_, _), r = cv2.minEnclosingCircle(cnt)
-        return "circle" if abs(area - np.pi*r*r) < 0.1*np.pi*r*r else "unknown"
+        (x,y), r = cv2.minEnclosingCircle(cnt)
+        circle_area = np.pi * (r**2)
+        return "circle" if abs(area - circle_area) < 0.1 * circle_area else "unknown"
 
-# Available shapes
-shapes = ["triangle", "square", "rectangle", "pentagon", "circle", "unknown"]
-
-# Load and classify images
-files = list_pngs(obj_dir)
-if not files:
-    st.error("No PNG images found in selected run.")
-    st.stop()
-items = []
-for fname in files:
+# Display detections
+st.title("Detected Shapes")
+cols = st.columns(3)
+for idx, fname in enumerate(images):
     img = cv2.imread(os.path.join(obj_dir, fname), cv2.IMREAD_UNCHANGED)
-    items.append({"file": fname, "image": img, "shape": classify_shape(img)})
+    rgba = cv2.cvtColor(img, cv2.COLOR_BGRA2RGBA)
+    shape = classify_shape(img)
+    col = cols[idx % 3]
+    col.image(rgba, caption=f"{fname}\n-> {shape}", use_container_width=True)
 
-# Sort items by detected shape
-sorted_items = sorted(items, key=lambda x: shapes.index(x['shape']))
-
-# Initialize selection state
-if 'to_rename' not in st.session_state:
-    st.session_state.to_rename = []
-
-# Define batch rename callback
-def do_batch_rename():
-    target = st.session_state.get('common_shape')
-    # Determine the next index for the target based on existing files
-    existing = [f for f in os.listdir(obj_dir) if f.startswith(f"{target}_") and f.lower().endswith('.png')]
-    # Extract numeric indices
-    indices = []
-    for f in existing:
-        try:
-            idx_str = f[len(target) + 1:-4]
-            indices.append(int(idx_str))
-        except ValueError:
-            continue
-    next_idx = max(indices) if indices else 0
-    # Rename selected files sequentially, avoiding collisions
-    for orig in st.session_state.to_rename:
-        next_idx += 1
-        src = os.path.join(obj_dir, orig)
-        dst_name = f"{target}_{next_idx:04d}.png"
-        dst = os.path.join(obj_dir, dst_name)
-        if os.path.exists(src) and src != dst:
-            # Ensure destination does not exist
-            if os.path.exists(dst):
-                st.warning(f"Skipping rename for {orig}: {dst_name} already exists")
-            else:
-                os.rename(src, dst)
-    # Clear selection and force UI refresh
-    st.session_state.to_rename = []
-    try:
-        st.experimental_rerun()
-    except Exception:
-        pass
-
-# Main UI
-st.title("Shapes & Batch Rename")
-cols = 3
-
-# Display sorted images with selection checkboxes
-for i in range(0, len(sorted_items), cols):
-    row = sorted_items[i:i+cols]
-    cols_ui = st.columns(cols)
-    for col_ui, item in zip(cols_ui, row):
-        fn = item['file']
-        img = cv2.cvtColor(item['image'], cv2.COLOR_BGRA2RGBA)
-        col_ui.image(img, caption=f"{fn}\n-> {item['shape']}", use_container_width=True)
-        selected = col_ui.checkbox("Select to rename", key=f"sel_{fn}")
-        if selected and fn not in st.session_state.to_rename:
-            st.session_state.to_rename.append(fn)
-        if not selected and fn in st.session_state.to_rename:
-            st.session_state.to_rename.remove(fn)
-
-# Batch rename controls
-to_rename = st.session_state.to_rename
-if to_rename:
-    st.write(f"**{len(to_rename)} files selected for rename**: {to_rename}")
-    st.selectbox("Rename all selected as:", shapes, key="common_shape")
-    st.button("Apply Batch Rename", on_click=do_batch_rename)
-else:
-    st.info("Select images above to enable batch rename.")
-
-# Automatically show sorted groups after rename
-for shp in shapes:
-    group = [it for it in sorted_items if it['shape'] == shp]
-    if group:
-        st.subheader(shp.capitalize())
-        for i in range(0, len(group), cols):
-            cols_ui = st.columns(cols)
-            for col_ui, it in zip(cols_ui, group[i:i+cols]):
-                img = cv2.cvtColor(it['image'], cv2.COLOR_BGRA2RGBA)
-                col_ui.image(img, caption=it['file'], use_container_width=True)
-
-# Save classified images to timestamped folder
-def save_classified():
-    # Re-scan directory to catch renamed files
-    files_now = list_pngs(obj_dir)
-    # Re-classify based on updated filenames
-    items_now = []
-    for fname in files_now:
-        img = cv2.imread(os.path.join(obj_dir, fname), cv2.IMREAD_UNCHANGED)
-        if img is None:
-            continue
-        shape = classify_shape(img)
-        items_now.append({"file": fname, "image": img, "shape": shape})
-    # Sort items by detected shape
-    items_now_sorted = sorted(items_now, key=lambda x: shapes.index(x['shape']))
-    # Prepare output folder
+# Save callback
+def save_all():
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    out_dir = os.path.join(APP2_FOLDER, "classified_objects", f"{selected_run}_{ts}")
+    out_dir = os.path.join(APP2_SIMPLE, "saved", f"{selected_run}_{ts}")
     os.makedirs(out_dir, exist_ok=True)
-    # Save each image with its current name/shape mapping
-    for item in items_now_sorted:
-        shp = item['shape']
-        base_name = os.path.splitext(item['file'])[0]
-        outfile = f"{base_name}.png"
-        cv2.imwrite(os.path.join(out_dir, outfile), item['image'])
-    st.sidebar.success(f"Saved {len(items_now_sorted)} images to {out_dir}")
+    for fname in images:
+        src = os.path.join(obj_dir, fname)
+        dst = os.path.join(out_dir, fname)
+        shutil.copy(src, dst)
+    st.success(f"Saved {len(images)} objects to {out_dir}")
 
-st.sidebar.button("Save Classified Images", on_click=save_classified)
-st.sidebar.info("Use above to view, select, rename, and save images.")
+if st.sidebar.button("Save All Objects"):
+    save_all()
+st.sidebar.info("Click to copy all detected objects to a timestamped folder.")
