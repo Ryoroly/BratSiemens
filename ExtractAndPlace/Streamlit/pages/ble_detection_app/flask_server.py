@@ -5,6 +5,7 @@ import asyncio
 import sys
 import os
 import threading
+import copy
 
 # Add current directory to path for imports
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -33,6 +34,24 @@ except Exception as e:
     FLASK_PORT = 5001
 
 
+def clean_payload_for_logging(payload):
+    """Remove base64 image data from payload for cleaner logging."""
+    clean_payload = copy.deepcopy(payload)
+    
+    # Remove or truncate base64 image data
+    if 'image' in clean_payload:
+        image_data = clean_payload['image']
+        if isinstance(image_data, str) and len(image_data) > 100:
+            # Keep only first 50 and last 20 characters for identification
+            clean_payload['image'] = f"{image_data[:50]}...{image_data[-20:]} [TRUNCATED {len(image_data)} chars]"
+    
+    # Remove other large data fields if they exist
+    if 'raw_image' in clean_payload:
+        clean_payload['raw_image'] = f"[RAW_IMAGE_DATA {len(str(clean_payload['raw_image']))} chars]"
+    
+    return clean_payload
+
+
 class FlaskServer:
     def __init__(self):
         self.app = Flask(__name__)
@@ -50,7 +69,10 @@ class FlaskServer:
                     return jsonify({'error': 'Content-Type must be application/json'}), 415
 
                 payload = request.get_json()
-                #print(f"📥 Received: {payload}")
+                
+                # Clean logging - remove base64 data
+                clean_payload = clean_payload_for_logging(payload)
+                print(f"📥 Received: {clean_payload}")
                 
                 # Store data for Streamlit
                 if data_store:
@@ -69,7 +91,9 @@ class FlaskServer:
                     'received_count': len(payload.get('detections', []))
                 }), 200
             except Exception as e:
-                #print(f"❌ Error in receive_data: {e}")
+                print(f"❌ Error in receive_data: {e}")
+                import traceback
+                traceback.print_exc()
                 return jsonify({'error': str(e)}), 500
 
         @self.app.route('/ready', methods=['GET'])
