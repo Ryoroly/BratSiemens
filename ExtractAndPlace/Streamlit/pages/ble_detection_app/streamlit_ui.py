@@ -12,13 +12,13 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, current_dir)
 
 from image_utils import ImageProcessor
-from config import FLASK_PORT  # Import Flask port, not Streamlit port
+from config import FLASK_PORT
 
 
 class StreamlitUI:
     def __init__(self):
         self.image_processor = ImageProcessor()
-        self.flask_url = f"http://localhost:{FLASK_PORT}"  # Connect to Flask server
+        self.flask_url = f"http://localhost:{FLASK_PORT}"
         self.server_running = False
 
     def check_server_status(self):
@@ -85,12 +85,56 @@ class StreamlitUI:
                 try:
                     response = requests.get(f"{self.flask_url}/status", timeout=2)
                     status_data = response.json()
+                    
+                    # Basic server info
                     st.write(f"**Detection Count:** {status_data.get('detection_count', 0)}")
-                    st.write(f"**BLE Available:** {'✅' if status_data.get('ble_available') else '❌'}")
-                    st.write(f"**Data Store:** {'✅' if status_data.get('data_store_available') else '❌'}")
                     timestamp = status_data.get('timestamp', 0)
                     if timestamp:
                         st.write(f"**Last Update:** {time.ctime(timestamp)}")
+                    
+                    # BLE Status
+                    st.subheader("📡 BLE Status")
+                    ble_available = status_data.get('ble_available', False)
+                    if ble_available:
+                        st.success("✅ BLE Handler Available")
+                        ble_status = status_data.get('ble_status', {})
+                        
+                        # BLE connection status
+                        connected = ble_status.get('connected', False)
+                        if connected:
+                            st.success("🔗 BLE Connected")
+                        else:
+                            st.warning("⚠️ BLE Disconnected")
+                        
+                        # Arm status
+                        arm_idle = ble_status.get('arm_idle', False)
+                        if arm_idle:
+                            st.success("🤖 Arm Ready")
+                        else:
+                            st.warning("🤖 Arm Busy")
+                        
+                        # Queue status
+                        has_queued = ble_status.get('has_queued_payload', False)
+                        if has_queued:
+                            st.info("📋 Command Queued")
+                        else:
+                            st.info("📋 No Queued Commands")
+                            
+                    else:
+                        st.error("❌ BLE Handler Not Available")
+                    
+                    # Check arm ready status
+                    try:
+                        ready_response = requests.get(f"{self.flask_url}/ready", timeout=2)
+                        ready_data = ready_response.json()
+                        arm_ready = ready_data.get('ready', False)
+                        if arm_ready:
+                            st.success("🎯 Ready for Commands")
+                        else:
+                            st.warning("⏳ Processing Command")
+                    except:
+                        pass
+                        
                 except Exception as e:
                     st.error(f"Error getting status: {e}")
             else:
@@ -117,6 +161,12 @@ class StreamlitUI:
                         if 'center_px' in det:
                             cx, cy = det['center_px']
                             st.write(f"**Position:** ({cx:.0f}, {cy:.0f})")
+                        
+                        # Show class mapping
+                        class_name = det.get('class', 'Unknown')
+                        from config import CLASS_ID
+                        class_id = CLASS_ID.get(class_name, 'Unknown')
+                        st.write(f"**Class ID:** {class_id}")
             
             # Crop shape info
             if 'crop_shape' in data:
@@ -130,7 +180,7 @@ class StreamlitUI:
         col1, col2, col3, col4 = st.columns(4)
         
         with col1:
-            auto_refresh = st.checkbox("Auto Refresh", value=False)  # Default to False
+            auto_refresh = st.checkbox("Auto Refresh", value=False)
         
         with col2:
             refresh_rate = st.slider("Refresh Rate (s)", 0.5, 5.0, 1.0)
@@ -158,23 +208,80 @@ class StreamlitUI:
         """Test connection to Flask server."""
         st.header("🔧 Connection Test")
         
-        if st.button("Test Flask Connection"):
-            with st.spinner("Testing connection..."):
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if st.button("Test Flask Connection"):
+                with st.spinner("Testing connection..."):
+                    try:
+                        response = requests.get(f"{self.flask_url}/test", timeout=5)
+                        if response.status_code == 200:
+                            st.success("✅ Flask server is reachable!")
+                            st.json(response.json())
+                            self.server_running = True
+                        else:
+                            st.error(f"❌ Server returned status code: {response.status_code}")
+                    except requests.exceptions.ConnectionError:
+                        st.error("❌ Connection refused - Flask server is not running")
+                    except requests.exceptions.Timeout:
+                        st.error("❌ Connection timeout")
+                    except Exception as e:
+                        st.error(f"❌ Error: {e}")
+        
+        with col2:
+            if st.button("Test BLE Ready"):
+                if self.server_running:
+                    with st.spinner("Checking BLE status..."):
+                        try:
+                            response = requests.get(f"{self.flask_url}/ready", timeout=5)
+                            if response.status_code == 200:
+                                data = response.json()
+                                if data.get('ready', False):
+                                    st.success("✅ BLE Arm is ready!")
+                                else:
+                                    st.warning("⏳ BLE Arm is busy")
+                                st.json(data)
+                            else:
+                                st.error(f"❌ Error: {response.status_code}")
+                        except Exception as e:
+                            st.error(f"❌ Error: {e}")
+                else:
+                    st.error("❌ Server not connected")
+
+    def send_test_data(self):
+        """Send test detection data to server."""
+        st.header("🧪 Test Data")
+        
+        if st.button("Send Test Detection"):
+            if self.server_running:
+                test_data = {
+                    "detections": [
+                        {
+                            "class": "cube",
+                            "confidence": 0.95,
+                            "center_px": [320, 240]
+                        }
+                    ],
+                    "crop_shape": [640, 480],
+                    "timestamp": time.time()
+                }
+                
                 try:
-                    # Test basic connection
-                    response = requests.get(f"{self.flask_url}/test", timeout=5)
+                    response = requests.post(
+                        f"{self.flask_url}/data", 
+                        json=test_data, 
+                        timeout=5
+                    )
                     if response.status_code == 200:
-                        st.success("✅ Flask server is reachable!")
-                        st.json(response.json())
-                        self.server_running = True
+                        result = response.json()
+                        st.success(f"✅ Test data sent! Status: {result.get('status')}")
+                        st.json(result)
                     else:
-                        st.error(f"❌ Server returned status code: {response.status_code}")
-                except requests.exceptions.ConnectionError:
-                    st.error("❌ Connection refused - Flask server is not running")
-                except requests.exceptions.Timeout:
-                    st.error("❌ Connection timeout")
+                        st.error(f"❌ Error: {response.status_code}")
                 except Exception as e:
-                    st.error(f"❌ Error: {e}")
+                    st.error(f"❌ Error sending test data: {e}")
+            else:
+                st.error("❌ Server not connected")
 
     def run(self):
         """Run the Streamlit application."""
@@ -185,6 +292,9 @@ class StreamlitUI:
         
         # Connection test section
         self.test_connection()
+        
+        # Test data section
+        self.send_test_data()
         
         # Server status in sidebar
         self.display_server_status()

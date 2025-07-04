@@ -4,6 +4,7 @@ from flask import Flask, request, jsonify
 import asyncio
 import sys
 import os
+import threading
 
 # Add current directory to path for imports
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -48,25 +49,40 @@ class FlaskServer:
                 if not request.is_json:
                     return jsonify({'error': 'Content-Type must be application/json'}), 415
 
-                content = request.get_json()
-                print(f"📥 Received: {content}")
+                payload = request.get_json()
+                #print(f"📥 Received: {payload}")
                 
                 # Store data for Streamlit
                 if data_store:
-                    data_store.store_data(content)
+                    data_store.store_data(payload)
                 
-                # Send over BLE
+                # Send over BLE using the new logic
                 if self.ble_handler:
-                    asyncio.run(self.ble_handler.send_data(content))
+                    status = asyncio.run(self.ble_handler.send_data(payload))
+                    print(f"📡 BLE Status: {status}")
                 else:
                     print("⚠️ BLE handler not available")
+                    status = 'no_ble'
                 
                 return jsonify({
-                    'status': 'success', 
-                    'received_count': len(content.get('detections', []))
+                    'status': status, 
+                    'received_count': len(payload.get('detections', []))
                 }), 200
             except Exception as e:
-                print(f"❌ Error in receive_data: {e}")
+                #print(f"❌ Error in receive_data: {e}")
+                return jsonify({'error': str(e)}), 500
+
+        @self.app.route('/ready', methods=['GET'])
+        def check_ready():
+            """Endpoint pentru a verifica dacă brațul este gata de următoarea comandă."""
+            try:
+                if self.ble_handler:
+                    ready = self.ble_handler.is_ready()
+                    return jsonify({'ready': ready}), 200
+                else:
+                    return jsonify({'ready': False, 'error': 'BLE handler not available'}), 200
+            except Exception as e:
+                print(f"❌ Error in check_ready: {e}")
                 return jsonify({'error': str(e)}), 500
 
         @self.app.route('/get', methods=['GET'])
@@ -92,12 +108,17 @@ class FlaskServer:
                 else:
                     detection_count = 0
                     timestamp = 0
+                
+                ble_status = {}
+                if self.ble_handler:
+                    ble_status = self.ble_handler.get_status()
                     
                 return jsonify({
                     'status': 'running',
                     'detection_count': detection_count,
                     'timestamp': timestamp,
                     'ble_available': self.ble_handler is not None,
+                    'ble_status': ble_status,
                     'data_store_available': data_store is not None
                 })
             except Exception as e:
@@ -122,7 +143,8 @@ class FlaskServer:
             """Test endpoint to verify server is working."""
             return jsonify({
                 'status': 'Server is running!',
-                'message': 'Flask server is working correctly'
+                'message': 'Flask server is working correctly',
+                'ble_available': self.ble_handler is not None
             })
 
         print("✅ Flask routes setup complete")
