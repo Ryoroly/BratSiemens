@@ -6,6 +6,11 @@ import subprocess
 import threading
 import time
 import argparse
+import logging
+
+log = logging.getLogger('werkzeug')
+log.setLevel(logging.ERROR) 
+
 
 # Add the ble_detection_app folder to Python path
 current_dir = os.path.dirname(os.path.abspath(__file__))
