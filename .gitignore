@@ -32,3 +32,4 @@ ExtractAndPlace/Streamlit/threshold_config.json
 /ExtractAndPlace/Streamlit/pages/rawObj/objPiCamera
 /ExtractAndPlace/Streamlit/pages/rawObj/objPiCamera2
 /ExtractAndPlace/Streamlit/pages/rawObj/solo_obj
+*.pyc
