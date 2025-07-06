@@ -60,7 +60,7 @@ def rotate_image(img, angle):
 
 def make_synth(idx, bg_files, obj_files_by_class, shadow_prob,
                object_folder, out_img, out_lbl,
-               min_objs=2, max_objs=4, max_angle=45):
+               min_objs=2, max_objs=4, max_angle=30):
     bg = cv2.resize(cv2.imread(random.choice(bg_files)), (640, 550))
     labels = []
     placed_boxes = []
@@ -122,6 +122,7 @@ def make_synth(idx, bg_files, obj_files_by_class, shadow_prob,
                                        use_bilateral=True,
                                        bilateral_params=(15, 100, 100),
                                        opacity=0.35)
+        
         # overlay rotated object
         bg = overlay_image(bg, fg_rot, x, y)
 
@@ -205,6 +206,6 @@ def write_data_yaml(output_folder="dataset"):
         yaml.safe_dump(data, f)
 
 if __name__ == "__main__":
-    create_dataset(n_per_class=500, split_ratio=0.8)
+    create_dataset(n_per_class=1200, split_ratio=0.85)
     write_data_yaml()
     print("✅ YOLO dataset ready — no overlaps, no leftover files, clean shadows.")
