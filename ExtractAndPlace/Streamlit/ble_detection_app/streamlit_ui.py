@@ -40,7 +40,7 @@ class StreamlitUI:
         
         st.title("🔍 BLE Detection Monitor")
         st.markdown("Real-time object detection with BLE communication")
-        st.markdown(f"**Connecting to Flask server:** `{self.flask_url}`")
+        st.markdown(f"**Flask Server:** `{self.flask_url}`")
 
     def check_flask_server(self):
         """Check Flask server status and update UI."""
@@ -205,181 +205,12 @@ class StreamlitUI:
         
         return auto_refresh, refresh_rate
 
-    def test_connection(self):
-        """Test connection to Flask server."""
-        st.header("🔧 Connection Test")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            if st.button("Test Flask Connection"):
-                with st.spinner("Testing connection..."):
-                    try:
-                        response = requests.get(f"{self.flask_url}/test", timeout=5)
-                        if response.status_code == 200:
-                            st.success("✅ Flask server is reachable!")
-                            st.json(response.json())
-                            self.server_running = True
-                        else:
-                            st.error(f"❌ Server returned status code: {response.status_code}")
-                    except requests.exceptions.ConnectionError:
-                        st.error("❌ Connection refused - Flask server is not running")
-                    except requests.exceptions.Timeout:
-                        st.error("❌ Connection timeout")
-                    except Exception as e:
-                        st.error(f"❌ Error: {e}")
-        
-        with col2:
-            if st.button("Test BLE Ready"):
-                if self.server_running:
-                    with st.spinner("Checking BLE status..."):
-                        try:
-                            response = requests.get(f"{self.flask_url}/ready", timeout=5)
-                            if response.status_code == 200:
-                                data = response.json()
-                                if data.get('ready', False):
-                                    st.success("✅ BLE Arm is ready!")
-                                else:
-                                    st.warning("⏳ BLE Arm is busy")
-                                st.json(data)
-                            else:
-                                st.error(f"❌ Error: {response.status_code}")
-                        except Exception as e:
-                            st.error(f"❌ Error: {e}")
-                else:
-                    st.error("❌ Server not connected")
-
-    def send_test_data(self):
-        """Send test detection data to server."""
-        st.header("🧪 Test Data")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            # Test data options
-            test_object = st.selectbox(
-                "Test Object", 
-                ["cube", "triangle", "rectangle", "arch", "cylinder", "half_circle"]
-            )
-            
-            confidence = st.slider("Confidence", 0.1, 1.0, 0.95)
-            
-            # Position controls
-            st.subheader("Position")
-            x_pos = st.slider("X Position", 0, 640, 320)
-            y_pos = st.slider("Y Position", 0, 480, 240)
-            
-            # Crop shape controls
-            st.subheader("Crop Shape")
-            crop_width = st.slider("Crop Width", 100, 1920, 640)
-            crop_height = st.slider("Crop Height", 100, 1080, 480)
-        
-        with col2:
-            if st.button("📤 Send Test Detection"):
-                if self.server_running:
-                    # Create a small test image (base64 encoded)
-                    import numpy as np
-                    from PIL import Image
-                    import io
-                    
-                    # Create a simple test image
-                    img_array = np.random.randint(0, 255, (100, 100, 3), dtype=np.uint8)
-                    img = Image.fromarray(img_array)
-                    
-                    # Convert to base64
-                    buffer = io.BytesIO()
-                    img.save(buffer, format='JPEG')
-                    img_base64 = base64.b64encode(buffer.getvalue()).decode()
-                    
-                    test_data = {
-                        "detections": [
-                            {
-                                "class": test_object,
-                                "confidence": confidence,
-                                "center_px": [x_pos, y_pos]
-                            }
-                        ],
-                        "crop_shape": [crop_width, crop_height],  # Include crop_shape!
-                        "image": img_base64,  # Small test image
-                        "timestamp": time.time()
-                    }
-                    
-                    try:
-                        with st.spinner("Sending test data..."):
-                            response = requests.post(
-                                f"{self.flask_url}/data", 
-                                json=test_data, 
-                                timeout=10
-                            )
-                            if response.status_code == 200:
-                                result = response.json()
-                                st.success(f"✅ Test data sent! Status: {result.get('status')}")
-                                st.json(result)
-                                
-                                # Show what would be sent to BLE
-                                st.info("📡 BLE Commands that would be sent:")
-                                st.code(f"S {crop_width} {crop_height}")
-                                
-                                from config import CLASS_ID
-                                obj_id = CLASS_ID.get(test_object, 1)
-                                st.code(f"T {x_pos} {y_pos} {obj_id}")
-                                
-                            else:
-                                st.error(f"❌ Error: {response.status_code}")
-                                st.text(response.text)
-                    except Exception as e:
-                        st.error(f"❌ Error sending test data: {e}")
-                else:
-                    st.error("❌ Server not connected")
-            
-            if st.button("🔄 Send Multiple Tests"):
-                if self.server_running:
-                    st.info("Sending 3 test detections...")
-                    
-                    test_objects = ["cube", "triangle", "rectangle"]
-                    
-                    for i, obj in enumerate(test_objects):
-                        test_data = {
-                            "detections": [
-                                {
-                                    "class": obj,
-                                    "confidence": 0.9 + i * 0.02,
-                                    "center_px": [300 + i * 50, 200 + i * 30]
-                                }
-                            ],
-                            "crop_shape": [640, 480],
-                            "timestamp": time.time()
-                        }
-                        
-                        try:
-                            response = requests.post(
-                                f"{self.flask_url}/data", 
-                                json=test_data, 
-                                timeout=10
-                            )
-                            if response.status_code == 200:
-                                result = response.json()
-                                st.success(f"✅ Test {i+1} ({obj}) sent! Status: {result.get('status')}")
-                                time.sleep(1)  # Small delay between tests
-                            else:
-                                st.error(f"❌ Test {i+1} failed: {response.status_code}")
-                        except Exception as e:
-                            st.error(f"❌ Test {i+1} error: {e}")
-                else:
-                    st.error("❌ Server not connected")
-
     def run(self):
         """Run the Streamlit application."""
         self.setup_page()
         
         # Initial server check
         self.check_flask_server()
-        
-        # Connection test section
-        self.test_connection()
-        
-        # Test data section
-        self.send_test_data()
         
         # Server status in sidebar
         self.display_server_status()

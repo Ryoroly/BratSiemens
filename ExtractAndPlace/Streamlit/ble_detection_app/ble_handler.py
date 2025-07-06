@@ -147,7 +147,7 @@ class BLEHandler:
         print(f"   {s_msg}")
         print(f"   {t_msg}")
         
-        # Trimite S și T ca operație atomică
+        # Trimite S și T
         try:
             # Trimite S
             fut1 = asyncio.run_coroutine_threadsafe(
@@ -155,7 +155,7 @@ class BLEHandler:
                 self.ble_loop
             )
             fut1.result(timeout=5)
-            print(f"✔ Sent: {s_msg}")
+            print(f"Sent: {s_msg}")
             
             # Trimite T imediat după S
             fut2 = asyncio.run_coroutine_threadsafe(
@@ -163,12 +163,12 @@ class BLEHandler:
                 self.ble_loop
             )
             fut2.result(timeout=5)
-            print(f"✔ Sent: {t_msg}")
+            print(f"Sent: {t_msg}")
             
-            print("✅ Atomic S+T commands sent successfully!")
+            print("S+T commands sent successfully!")
             
         except Exception as e:
-            print(f"❌ Failed to send atomic commands: {e}")
+            print(f"Failed to send atomic commands: {e}")
             # Re-queue payload pentru retry
             with self.lock:
                 self.last_payload = payload
@@ -178,7 +178,7 @@ class BLEHandler:
         """Public method pentru a trimite date (compatibilitate cu codul existent)."""
         # Validare crop_shape
         if 'crop_shape' not in data:
-            print("❌ REJECT: payload fără crop_shape!")
+            print("REJECT: payload fără crop_shape!")
             return 'rejected_no_crop_shape'
         
         with self.lock:

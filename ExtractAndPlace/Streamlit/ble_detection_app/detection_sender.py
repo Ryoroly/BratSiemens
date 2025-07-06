@@ -33,7 +33,7 @@ class DetectionSender:
             
             pil_image = Image.fromarray(image_array)
             buffer = BytesIO()
-            pil_image.save(buffer, format='JPEG', quality=85)
+            pil_image.save(buffer, format='JPEG', quality=60)
             image_base64 = base64.b64encode(buffer.getvalue()).decode()
         else:
             # Default dimensions if no image
@@ -62,7 +62,7 @@ class DetectionSender:
             if 'crop_shape' not in payload:
                 raise ValueError("crop_shape is mandatory!")
             
-            print(f"📤 Sending {len(detections)} detections with crop_shape {payload['crop_shape']}")
+            print(f"Sending {len(detections)} detections with crop_shape {payload['crop_shape']}")
             
             response = requests.post(
                 f"{self.flask_url}/data",
@@ -73,12 +73,12 @@ class DetectionSender:
             if response.status_code == 200:
                 result = response.json()
                 status = result.get('status', 'unknown')
-                print(f"✅ Detection sent! BLE Status: {status}")
+                print(f"Detection sent! BLE Status: {status}")
                 return True
             else:
-                print(f"❌ Send failed: {response.status_code}")
+                print(f"Send failed: {response.status_code}")
                 return False
                 
         except Exception as e:
-            print(f"❌ Send error: {e}")
+            print(f"Send error: {e}")
             return False

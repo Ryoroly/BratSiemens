@@ -31,25 +31,38 @@ def run_flask_server():
         print(f"❌ Error starting Flask server: {e}")
 
 
-def run_streamlit_ui():
+def run_streamlit_ui(test_mode=False):
     """Run the Streamlit UI."""
-    print("🚀 Starting Streamlit UI...")
+    if test_mode:
+        print("🧪 Starting Streamlit Test & Debug UI...")
+        ui_file = "streamlit_test_ui.py"
+        port = "8502"  # Different port for test mode
+    else:
+        print("🚀 Starting Streamlit UI...")
+        ui_file = "streamlit_ui.py"
+        port = "8501"
+    
     print(f"📡 Will connect to Flask server at localhost:{FLASK_PORT}")
     
     # Change to the ble_detection_app directory to run streamlit
     original_dir = os.getcwd()
     try:
         os.chdir(ble_app_dir)
-        subprocess.run([sys.executable, "-m", "streamlit", "run", "streamlit_ui.py", "--server.port", "8501"])
+        subprocess.run([sys.executable, "-m", "streamlit", "run", ui_file, "--server.port", port])
     finally:
         os.chdir(original_dir)
 
 
-def run_both():
+def run_both(test_mode=False):
     """Run both server and UI."""
-    print("🚀 Starting both Flask server and Streamlit UI...")
-    print(f"📡 Flask server will run on port {FLASK_PORT}")
-    print("📡 Streamlit UI will run on port 8501")
+    if test_mode:
+        print("🧪 Starting Flask server and Streamlit Test & Debug UI...")
+        print(f"📡 Flask server will run on port {FLASK_PORT}")
+        print("📡 Streamlit Test UI will run on port 8502")
+    else:
+        print("🚀 Starting both Flask server and Streamlit UI...")
+        print(f"📡 Flask server will run on port {FLASK_PORT}")
+        print("📡 Streamlit UI will run on port 8501")
     
     # Start Flask server in background thread
     server_thread = threading.Thread(target=run_flask_server, daemon=True)
@@ -60,7 +73,7 @@ def run_both():
     time.sleep(3)
     
     # Start Streamlit UI (this will block)
-    run_streamlit_ui()
+    run_streamlit_ui(test_mode)
 
 
 def test_connection():
@@ -79,12 +92,17 @@ def main():
     parser = argparse.ArgumentParser(description="BLE Detection Application")
     parser.add_argument("--mode", choices=["server", "ui", "both", "test"], default="both",
                        help="Run mode: server only, ui only, both, or test connection")
+    parser.add_argument("--test", action="store_true", 
+                       help="Enable test mode with full debugging and logging features")
     
     args = parser.parse_args()
     
     print(f"📁 Working from: {current_dir}")
     print(f"📁 BLE App folder: {ble_app_dir}")
     print(f"🔧 Flask server will use port: {FLASK_PORT}")
+    
+    if args.test:
+        print("🧪 TEST MODE ENABLED - Full debugging and logging features active")
     
     if not os.path.exists(ble_app_dir):
         print(f"❌ Error: ble_detection_app folder not found at {ble_app_dir}")
@@ -93,11 +111,11 @@ def main():
     if args.mode == "server":
         run_flask_server()
     elif args.mode == "ui":
-        run_streamlit_ui()
+        run_streamlit_ui(args.test)
     elif args.mode == "test":
         test_connection()
     else:
-        run_both()
+        run_both(args.test)
 
 
 if __name__ == "__main__":

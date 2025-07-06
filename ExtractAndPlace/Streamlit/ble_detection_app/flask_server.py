@@ -1,4 +1,5 @@
-"""Flask server for receiving detection data and serving to Streamlit."""
+# Flask server pentru primirea datelor de detectie si servirea catre Streamlit
+# Creat pentru integrarea cu robotic arm prin BLE
 
 from flask import Flask, request, jsonify
 import asyncio
@@ -7,83 +8,89 @@ import os
 import threading
 import copy
 
-# Add current directory to path for imports
+# Hack pentru importuri - adaug directorul curent la path
 current_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, current_dir)
 
+# Import BLE handler daca exista
 try:
     from ble_handler import BLEHandler
-    print("✅ BLEHandler imported successfully")
+    print("BLEHandler loaded OK")
 except Exception as e:
-    print(f"⚠️ Warning: Could not import BLEHandler: {e}")
+    print(f"Nu pot incarca BLEHandler: {e}")
     BLEHandler = None
 
+# Import data storage
 try:
     from data_storage import data_store
-    print("✅ data_store imported successfully")
+    print("Data store loaded")
 except Exception as e:
-    print(f"⚠️ Warning: Could not import data_store: {e}")
+    print(f"Nu pot incarca data_store: {e}")
     data_store = None
 
+# Config pentru server
 try:
     from config import FLASK_HOST, FLASK_PORT
-    print(f"✅ Config imported - Host: {FLASK_HOST}, Port: {FLASK_PORT}")
+    print(f"Config loaded - {FLASK_HOST}:{FLASK_PORT}")
 except Exception as e:
-    print(f"⚠️ Warning: Could not import config: {e}")
+    print(f"Config nu e disponibil: {e}")
+    # Fallback values
     FLASK_HOST = '0.0.0.0'
     FLASK_PORT = 5001
 
-
-def clean_payload_for_logging(payload):
-    """Remove base64 image data from payload for cleaner logging."""
-    clean_payload = copy.deepcopy(payload)
+def strip_image_data_for_log(payload):
+    # Curăță payload-ul de date mari pentru logging decent
+    # Clonam obiectul ca sa nu stricam originalul
+    clean_data = copy.deepcopy(payload)
     
-    # Remove or truncate base64 image data
-    if 'image' in clean_payload:
-        image_data = clean_payload['image']
-        if isinstance(image_data, str) and len(image_data) > 100:
-            # Keep only first 50 and last 20 characters for identification
-            clean_payload['image'] = f"{image_data[:50]}...{image_data[-20:]} [TRUNCATED {len(image_data)} chars]"
+    # Scap de imaginile mari din log
+    if 'image' in clean_data:
+        img_data = clean_data['image']
+        if isinstance(img_data, str) and len(img_data) > 100:
+            # Pastrez doar inceputul si sfarsitul pentru debug
+            clean_data['image'] = f"{img_data[:50]}...[{len(img_data)} chars]...{img_data[-20:]}"
     
-    # Remove other large data fields if they exist
-    if 'raw_image' in clean_payload:
-        clean_payload['raw_image'] = f"[RAW_IMAGE_DATA {len(str(clean_payload['raw_image']))} chars]"
+    # Alte campuri mari daca exista
+    if 'raw_image' in clean_data:
+        clean_data['raw_image'] = f"[RAW_IMG_DATA {len(str(clean_data['raw_image']))} chars]"
     
-    return clean_payload
+    return clean_data
 
 
 class FlaskServer:
     def __init__(self):
         self.app = Flask(__name__)
+        # Încerc să inițializez BLE handler-ul dacă există
         self.ble_handler = BLEHandler() if BLEHandler else None
         self._setup_routes()
-        print("✅ FlaskServer initialized")
+        print("Flask server ready")
 
     def _setup_routes(self):
-        """Setup Flask routes."""
+        # Setup pentru toate rutele Flask
         
         @self.app.route('/data', methods=['POST'])
         def receive_data():
             try:
+                # Verific daca primesc JSON
                 if not request.is_json:
-                    return jsonify({'error': 'Content-Type must be application/json'}), 415
+                    return jsonify({'error': 'Trebuie sa fie JSON'}), 415
 
                 payload = request.get_json()
                 
-                # Clean logging - remove base64 data
-                clean_payload = clean_payload_for_logging(payload)
-                print(f"📥 Received: {clean_payload}")
+                # Curăț logging-ul - scap de datele mari
+                clean_payload = strip_image_data_for_log(payload)
+                #print(f"Primit: {clean_payload}")
                 
-                # Store data for Streamlit
+                # Salvez datele pentru Streamlit
                 if data_store:
                     data_store.store_data(payload)
                 
-                # Send over BLE using the new logic
+                # Trimit prin BLE daca pot
                 if self.ble_handler:
                     status = asyncio.run(self.ble_handler.send_data(payload))
-                    print(f"📡 BLE Status: {status}")
+                    print(f"BLE: {status}")
                 else:
-                    print("⚠️ BLE handler not available")
+                    print("BLE nu e disponibil")
                     status = 'no_ble'
                 
                 return jsonify({
@@ -91,40 +98,40 @@ class FlaskServer:
                     'received_count': len(payload.get('detections', []))
                 }), 200
             except Exception as e:
-                print(f"❌ Error in receive_data: {e}")
+                print(f"Eroare in receive_data: {e}")
                 import traceback
                 traceback.print_exc()
                 return jsonify({'error': str(e)}), 500
 
         @self.app.route('/ready', methods=['GET'])
         def check_ready():
-            """Endpoint pentru a verifica dacă brațul este gata de următoarea comandă."""
+            # Verific daca bratul e gata pentru urmatoarea comanda
             try:
                 if self.ble_handler:
                     ready = self.ble_handler.is_ready()
                     return jsonify({'ready': ready}), 200
                 else:
-                    return jsonify({'ready': False, 'error': 'BLE handler not available'}), 200
+                    return jsonify({'ready': False, 'error': 'BLE nu e disponibil'}), 200
             except Exception as e:
-                print(f"❌ Error in check_ready: {e}")
+                print(f"Eroare in check_ready: {e}")
                 return jsonify({'error': str(e)}), 500
 
         @self.app.route('/get', methods=['GET'])
         def get_data():
-            """Endpoint for Streamlit to fetch latest data."""
+            # Pentru Streamlit sa poata lua datele
             try:
                 if data_store:
                     latest_data = data_store.get_latest_data()
                 else:
-                    latest_data = {'detections': [], 'message': 'No data store available'}
+                    latest_data = {'detections': [], 'message': 'Nu am data store'}
                 return jsonify(latest_data)
             except Exception as e:
-                print(f"❌ Error in get_data: {e}")
+                print(f"Eroare in get_data: {e}")
                 return jsonify({'error': str(e)}), 500
 
         @self.app.route('/status', methods=['GET'])
         def get_status():
-            """Get server status."""
+            # Status general al serverului
             try:
                 if data_store:
                     detection_count = data_store.get_detection_count()
@@ -146,48 +153,49 @@ class FlaskServer:
                     'data_store_available': data_store is not None
                 })
             except Exception as e:
-                print(f"❌ Error in get_status: {e}")
+                print(f"Eroare in get_status: {e}")
                 return jsonify({'error': str(e)}), 500
 
         @self.app.route('/clear', methods=['POST'])
         def clear_data():
-            """Clear stored data."""
+            # Golesc datele stocate
             try:
                 if data_store:
                     data_store.clear_data()
                     return jsonify({'status': 'cleared'})
                 else:
-                    return jsonify({'status': 'no data store available'})
+                    return jsonify({'status': 'nu am data store'})
             except Exception as e:
-                print(f"❌ Error in clear_data: {e}")
+                print(f"Eroare in clear_data: {e}")
                 return jsonify({'error': str(e)}), 500
 
         @self.app.route('/test', methods=['GET'])
         def test_endpoint():
-            """Test endpoint to verify server is working."""
+            # Test simplu ca sa vad daca merge serverul
             return jsonify({
-                'status': 'Server is running!',
-                'message': 'Flask server is working correctly',
+                'status': 'Server merge!',
+                'message': 'Flask functioneaza OK',
                 'ble_available': self.ble_handler is not None
             })
 
-        print("✅ Flask routes setup complete")
+        print("Rutele Flask sunt gata")
 
     def run(self, host=None, port=None, debug=False):
-        """Run the Flask server."""
+        # Pornesc serverul Flask
         host = host or FLASK_HOST
         port = port or FLASK_PORT
         
-        print(f"🚀 Starting Flask server on {host}:{port}")
+        print(f"Pornesc Flask pe {host}:{port}")
         try:
+            # use_reloader=False ca sa nu se incurce cu threading-ul
             self.app.run(host=host, port=port, debug=debug, use_reloader=False)
         except Exception as e:
-            print(f"❌ Error starting Flask server: {e}")
+            print(f"Eroare la pornirea serverului: {e}")
             raise
 
 
-# Create server instance
-print("🔄 Creating FlaskServer instance...")
+# Creez instanta de server
+print("Creez instanta FlaskServer...")
 flask_server = FlaskServer()
-app = flask_server.app  # For compatibility
-print("✅ FlaskServer instance created")
+app = flask_server.app  # pentru compatibilitate cu alte script-uri
+print("FlaskServer creat")
